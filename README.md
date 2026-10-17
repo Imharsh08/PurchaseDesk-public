@@ -4,6 +4,11 @@ Purchase management for manufacturing companies (built for Indian GST): indent �
 comparative statement → approval → purchase order → goods receipt and quality check → bill → payment,
 with stock, vendor performance, an FMS step tracker and reports.
 
+![PurchaseDesk dashboard with demo data](docs/img/dashboard.webp)
+
+**Showcase site:** https://imharsh08.github.io/PurchaseDesk-public/ (features, screenshots and
+diagrams; source in [`docs/`](docs/index.html)).
+
 ## Features
 
 - **Users and roles:** Admin, Manager, Purchaser, Warehouse, Accounts (a person can hold several).
@@ -67,8 +72,8 @@ Requires Node.js 22 and a PostgreSQL database (a free Neon project works, or `np
 one).
 
 ```bash
-git clone https://github.com/<you>/PurchaseDesk.git
-cd PurchaseDesk
+git clone https://github.com/Imharsh08/PurchaseDesk-public.git
+cd PurchaseDesk-public
 npm install
 cp .env.example .env        # set DATABASE_URL and SESSION_SECRET
 npm run db:deploy           # create the tables
@@ -160,6 +165,14 @@ password sign-in stops once Google is on.
 Worker. Create a Hyperdrive config for your database and put its id in `wrangler.jsonc`, set the `vars`
 there, and upload secrets from `.env` with `npm run cf:secrets`. Pages + Neon Functions is the
 recommended setup: Workers' free plan has a 10 ms CPU limit per request that server-rendered pages exceed.
+
+## Showcase site (GitHub Pages)
+
+`docs/` is a static page about the app (features, screenshots taken from demo data, the
+cross-functional flow and the architecture). To publish it: repository **Settings** → **Pages** →
+**Source: Deploy from a branch** → branch `main`, folder `/docs` → **Save**. After a minute it is live at
+https://imharsh08.github.io/PurchaseDesk-public/. In a fork, change the GitHub links in
+`docs/index.html` to your repository.
 
 ## Scripts
 

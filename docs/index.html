@@ -1,0 +1,957 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PurchaseDesk</title>
+<meta name="description" content="Open-source purchase management for manufacturers: indents, quotation comparison, approvals, purchase orders, goods receipt, bills and an FMS step tracker. Built for Indian GST, free to host.">
+<meta property="og:title" content="PurchaseDesk">
+<meta property="og:description" content="From indent to payment: every purchase step, timed. Open source, built for Indian GST.">
+<meta property="og:image" content="img/dashboard.webp">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23f6cf1a'/%3E%3Cpath d='M9 10h14v3H9zm0 5h14v3H9zm0 5h9v3H9z' fill='%230d0d0d'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+  /* Layout: one poster-like scroll. Giant condensed type, mono bracket labels, a yellow stage with a phone,
+     grey rounded panels for screenshots, numbered cards for the lifecycle, a black deploy band, giant footer word. */
+  :root {
+    --paper: #ffffff;
+    --ink: #0d0d0d;
+    --sun: #f6cf1a;
+    --chili: #e8402a;
+    --fog: #ededeb;
+    --stone: #63635e;
+    --line: #d6d6d0;
+    --display: "Anton", Impact, "Arial Narrow Bold", sans-serif;
+    --body: "Manrope", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+    --gutter: max(20px, env(safe-area-inset-left, 0px));
+    --gutter-r: max(20px, env(safe-area-inset-right, 0px));
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+  img { max-width: 100%; display: block; }
+  a { color: inherit; }
+  :focus-visible { outline: 3px solid var(--chili); outline-offset: 3px; border-radius: 6px; }
+  .wrap { max-width: 1440px; margin: 0 auto; padding-left: var(--gutter); padding-right: var(--gutter-r); }
+  .mono { font-family: var(--mono); font-size: 12.5px; letter-spacing: .04em; text-transform: uppercase; }
+
+  /* Nav */
+  .nav { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; padding-block: 18px; }
+  .nav .brand { font-family: var(--mono); font-weight: 500; letter-spacing: .06em; text-decoration: none; }
+  .nav ul { display: flex; gap: 14px; margin: 0; padding: 0; list-style: none; }
+  .nav a { text-decoration: none; }
+  .nav ul a:hover, .nav .gh:hover { color: var(--chili); }
+  .nav .gh { justify-self: end; }
+
+  /* Hero */
+  .hero { position: relative; overflow: hidden; padding-bottom: 0; }
+  .mega { margin: 0; font-family: var(--display); font-weight: 400; font-size: min(23.4vw, 336px); line-height: .8; letter-spacing: -.005em; text-transform: uppercase; text-align: center; white-space: nowrap; padding-top: 2vw; }
+  .stage { position: relative; margin-top: -0.6vw; background: var(--sun); border-radius: 32px; min-height: clamp(460px, 44vw, 640px); overflow: hidden; display: grid; grid-template-columns: 1fr minmax(240px, 330px) 1fr; gap: 24px; padding: 48px 40px; }
+  .stage .shape { position: absolute; pointer-events: none; }
+  .stage .copy { position: relative; z-index: 2; align-self: start; display: grid; gap: 22px; max-width: 34ch; }
+  .stage .copy p { margin: 0; color: var(--chili); line-height: 1.5; }
+  .stage .right { grid-column: 3; align-self: end; justify-self: end; max-width: 30ch; text-align: left; margin-right: 44px; margin-bottom: 24px; }
+  .stamp { display: grid; justify-items: center; gap: .06em; font-family: var(--display); font-size: .36em; line-height: 1; text-transform: uppercase; color: var(--chili); border: 5px solid var(--chili); border-radius: 12px; padding: .12em .32em .16em; transform: rotate(-9deg); }
+  .stamp small { font-family: var(--mono); font-size: .3em; letter-spacing: .08em; }
+  .vert { position: absolute; top: 24px; bottom: 24px; writing-mode: vertical-rl; color: var(--chili); white-space: nowrap; overflow: hidden; z-index: 1; }
+  .vert.l { left: 12px; transform: rotate(180deg); }
+  .vert.r { right: 12px; }
+  .phone-slot { grid-column: 2; }
+  .phone { position: absolute; z-index: 3; left: 50%; transform: translateX(-50%); top: min(11vw, 158px); width: clamp(240px, 23vw, 330px); aspect-ratio: 390 / 844; border-radius: 15% / 7%; background: #111; padding: clamp(6px, .8vw, 11px); box-shadow: 0 30px 60px -20px rgba(0,0,0,.45), inset 0 0 0 2px #2b2b2b; container-type: inline-size; }
+  .phone::before { content: ""; position: absolute; top: 5.6cqw; left: 50%; transform: translateX(-50%); width: 30%; height: 8.4cqw; border-radius: 6cqw; background: #0a0a0a; z-index: 2; }
+  .phone .screen { position: relative; height: 100%; border-radius: 12% / 5.6%; overflow: hidden; background: #f8f7f4; padding-top: 14cqw; }
+  .phone .sb { position: absolute; top: 4.6cqw; left: 11cqw; font: 600 4.4cqw var(--body); color: var(--ink); }
+  .phone img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+  .btns { display: flex; flex-wrap: wrap; gap: 10px; }
+  .pill { display: inline-flex; align-items: center; gap: 10px; padding: 14px 22px; border-radius: 14px; background: var(--ink); color: #fff; font-weight: 600; font-size: 15px; text-decoration: none; transition: transform .15s ease, background .15s ease; }
+  .pill:hover { transform: translateY(-2px); background: #262626; }
+  .pill.ghost { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 2px var(--ink); }
+  .pill.ghost:hover { background: rgba(0,0,0,.06); }
+  .pill svg { width: 16px; height: 16px; }
+
+  /* Ticker */
+  .ticker { overflow: hidden; border-block: 1px solid var(--line); padding-block: 12px; margin-top: 56px; }
+  .ticker .track { display: flex; width: max-content; animation: slide 38s linear infinite; }
+  .ticker span { padding-right: 14px; white-space: nowrap; }
+  .ticker b { color: var(--chili); font-weight: 500; }
+  @keyframes slide { to { transform: translateX(-50%); } }
+
+  /* Statement */
+  .statement { padding-block: 72px 80px; }
+  .st-inner { position: relative; display: grid; justify-items: center; text-align: center; }
+  .statement .line { font-family: var(--display); text-transform: uppercase; font-size: clamp(64px, 9.5vw, 150px); line-height: .9; margin: 0; }
+  .statement .line.red { color: var(--chili); }
+  .paren { display: flex; align-items: center; gap: clamp(8px, 2vw, 24px); font-family: var(--display); font-size: clamp(64px, 9.5vw, 150px); line-height: 1; }
+  .paren .ast { font-size: .7em; align-self: flex-start; }
+  .paren .box { width: clamp(150px, 17vw, 250px); aspect-ratio: 3 / 2; background: var(--sun); border-radius: 18px; display: grid; place-items: center; overflow: hidden; }
+  .paren .box img { width: 88%; border-radius: 8px; box-shadow: 0 10px 24px -10px rgba(0,0,0,.35); transform: rotate(-4deg) translateY(10%); }
+  .side { position: absolute; display: flex; align-items: center; gap: 14px; }
+  .side .rule { height: 2px; background: var(--ink); }
+  .side.a { top: 40px; left: 50%; margin-left: clamp(150px, 15vw, 240px); right: 0; }
+  .side.a .rule { flex: 1; }
+  .side.b { bottom: 40px; right: 50%; margin-right: clamp(90px, 9vw, 150px); left: 0; justify-content: flex-end; }
+  .side.b .rule { flex: 1; }
+  .tag { padding: 12px 20px; border-radius: 12px; background: var(--ink); color: #fff; font-weight: 600; font-size: 14px; text-decoration: none; white-space: nowrap; }
+  .label-l, .label-r { position: absolute; }
+  .label-l { top: 60px; right: 50%; margin-right: clamp(170px, 16vw, 260px); }
+  .label-r { top: 50%; left: 50%; margin-left: clamp(170px, 16vw, 260px); }
+
+  /* Section heads */
+  .sec-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px 32px; margin-bottom: 28px; }
+  .sec-head h2 { margin: 0; font-family: var(--display); font-weight: 400; text-transform: uppercase; font-size: clamp(44px, 6vw, 88px); line-height: .92; text-wrap: balance; }
+  .sec-head p { margin: 0; max-width: 46ch; color: var(--stone); }
+  section.block { padding-block: 56px; }
+
+  /* Screen panels */
+  .panel { background: var(--fog); border-radius: 32px; padding: clamp(20px, 4vw, 56px); display: grid; justify-items: center; gap: 18px; overflow: hidden; }
+  .browser { width: min(100%, 1180px); border-radius: 14px; background: #fff; box-shadow: 0 2px 0 rgba(0,0,0,.04), 0 40px 70px -40px rgba(0,0,0,.45); overflow: hidden; }
+  .browser .bar { display: flex; align-items: center; gap: 7px; padding: 11px 14px; background: #f4f4f2; border-bottom: 1px solid #e3e3df; }
+  .browser .bar i { width: 11px; height: 11px; border-radius: 50%; background: #d4d4cf; }
+  .browser .bar span { margin-left: 12px; font-family: var(--mono); font-size: 11.5px; color: var(--stone); background: #fff; border-radius: 6px; padding: 3px 12px; }
+  .browser img { width: 100%; height: auto; }
+  .seg { display: inline-flex; padding: 4px; border-radius: 12px; background: #fff; gap: 4px; }
+  .seg button { font: 600 14px var(--body); border: 0; border-radius: 9px; padding: 8px 16px; background: transparent; color: var(--ink); cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+
+  /* Numbered cards */
+  .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+  .card { background: var(--fog); border-radius: 26px; padding: 26px 26px 30px; display: grid; align-content: start; gap: 10px; min-height: 260px; }
+  .card .n { font-family: var(--display); font-size: 64px; line-height: 1; margin-bottom: 36px; }
+  .card h3 { margin: 0; font-size: 21px; font-weight: 700; letter-spacing: -.01em; }
+  .card p { margin: 0; color: var(--stone); font-size: 15px; }
+  .card.sun { background: var(--sun); }
+  .card.sun p { color: #3b3510; }
+  .card.ink { background: var(--ink); color: #fff; }
+  .card.ink p { color: #b9b9b2; }
+  .card.ink .n { color: var(--sun); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .chips span { font-family: var(--mono); font-size: 11px; letter-spacing: .03em; padding: 4px 8px; border-radius: 6px; background: rgba(0,0,0,.07); }
+  .card.ink .chips span { background: rgba(255,255,255,.12); }
+
+  /* Phones band */
+  .phones { position: relative; background: var(--chili); border-radius: 32px; padding: clamp(28px, 5vw, 64px); display: grid; grid-template-columns: 1fr auto; gap: 32px; align-items: center; overflow: hidden; color: #fff; }
+  .phones h2 { margin: 0; font-family: var(--display); font-weight: 400; text-transform: uppercase; font-size: clamp(48px, 7vw, 104px); line-height: .9; }
+  .phones p { margin: 16px 0 0; max-width: 36ch; color: #ffe1db; }
+  .phones .row { position: relative; z-index: 1; display: flex; gap: clamp(10px, 2vw, 24px); }
+  .phones .phone { position: relative; left: auto; top: auto; transform: none; width: clamp(150px, 15vw, 230px); }
+  .phones .row .phone:nth-child(2) { transform: translateY(28px); }
+  .phones .shape { position: absolute; pointer-events: none; }
+
+  /* Gallery */
+  .gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .gallery figure { margin: 0; background: var(--fog); border-radius: 26px; padding: clamp(16px, 2.4vw, 28px); display: grid; gap: 14px; align-content: start; }
+  .gallery figcaption { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+  .gallery figcaption b { font-size: 17px; }
+  .gallery figcaption span { color: var(--stone); font-size: 14px; text-align: right; }
+  .gallery .browser { box-shadow: 0 30px 50px -36px rgba(0,0,0,.45); }
+
+  /* Diagrams */
+  .diagram { --surface: #ffffff; --lane: #f6f6f3; --ink: #0d0d0d; --muted: #63635e; --edge: #3d3d39; --rule: #dcdcd6; --accent: #0d0d0d; --accent-tint: #fdf0b3; --warn: #d6331e; --sans: var(--body); --mono: "JetBrains Mono", ui-monospace, monospace; background: var(--fog); border-radius: 32px; padding: clamp(14px, 3vw, 40px); }
+  .diagram .scroll { overflow-x: auto; background: #fff; border-radius: 18px; }
+  .diagram svg { display: block; width: 100%; height: auto; font-family: var(--sans); }
+  .diagram svg.map { min-width: 1180px; }
+  .diagram svg.arch { min-width: 880px; }
+  .diagram .cap { margin: 16px 6px 0; color: var(--stone); font-size: 14.5px; max-width: 90ch; }
+  .lane-a { fill: var(--surface); } .lane-b { fill: var(--lane); }
+  .lane-rule { stroke: var(--rule); stroke-width: 1; }
+  .lane-name { fill: var(--ink); font-size: 13px; font-weight: 700; }
+  .lane-sub { fill: var(--muted); font-size: 11px; }
+  .phase-code { fill: var(--chili); font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: .04em; }
+  .phase-name { fill: var(--ink); font-size: 12px; font-weight: 700; }
+  .phase-rule { stroke: var(--ink); stroke-width: 2; }
+  .step rect { fill: var(--surface); stroke: var(--ink); stroke-width: 1.25; }
+  .step.decide rect { fill: var(--sun); stroke: var(--ink); stroke-width: 1.5; }
+  .step.ext rect { fill: var(--lane); }
+  .step .t { fill: var(--ink); font-size: 12.5px; font-weight: 700; }
+  .step .s { fill: var(--muted); font-size: 11px; }
+  .auto rect { fill: var(--accent-tint); stroke: var(--ink); stroke-width: 1.25; stroke-dasharray: 4 3; }
+  .auto .t { fill: var(--ink); font-size: 12px; font-weight: 700; }
+  .auto .s { fill: #5a4d00; font-size: 11px; }
+  .edge { fill: none; stroke: var(--edge); stroke-width: 1.5; }
+  .edge.back, .edge.alt { stroke-dasharray: 5 4; }
+  .edge.fail { stroke: var(--warn); stroke-dasharray: 5 4; }
+  .edge-label { fill: var(--muted); font-size: 11px; }
+  .edge-label.fail { fill: var(--warn); font-weight: 700; }
+  .head { fill: var(--edge); } .head-warn { fill: var(--warn); }
+  .band rect { fill: var(--sun); }
+  .band text { fill: var(--ink); font-size: 12.5px; font-weight: 600; }
+  .group rect { fill: none; stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 6 4; }
+  .group text { fill: var(--ink); font-family: var(--mono); font-size: 11px; letter-spacing: .06em; }
+  .box rect { fill: var(--surface); stroke: var(--ink); stroke-width: 1.25; }
+  .box.store rect { fill: var(--sun); stroke: var(--ink); stroke-width: 1.5; }
+  .box.ext rect { fill: var(--lane); }
+  .box.alt rect { fill: none; stroke-dasharray: 5 4; stroke: var(--muted); }
+  .box .t { fill: var(--ink); font-size: 14px; font-weight: 700; }
+  .box .s { fill: var(--muted); font-size: 11.5px; }
+  .box.store .s { fill: #4a4000; }
+  .chip rect { fill: var(--lane); }
+  .chip text { fill: var(--ink); font-size: 12px; }
+  .tabs { display: inline-flex; gap: 4px; padding: 4px; background: #fff; border-radius: 12px; margin-bottom: 16px; }
+  .tabs button { font: 600 14px var(--body); border: 0; border-radius: 9px; padding: 8px 16px; background: transparent; color: var(--ink); cursor: pointer; }
+  .tabs button[aria-selected="true"] { background: var(--ink); color: #fff; }
+
+  /* Deploy */
+  .deploy { background: var(--ink); color: #fff; border-radius: 32px; padding: clamp(28px, 5vw, 64px); display: grid; gap: 36px; }
+  .deploy h2 { margin: 0; font-family: var(--display); font-weight: 400; text-transform: uppercase; font-size: clamp(48px, 7vw, 104px); line-height: .9; }
+  .deploy h2 em { font-style: normal; color: var(--sun); }
+  .deploy .lead { margin: 14px 0 0; color: #b9b9b2; max-width: 52ch; }
+  .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; }
+  .steps li { list-style: none; background: #1b1b1b; border-radius: 22px; padding: 24px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+  .steps .k { font-family: var(--mono); font-size: 12px; color: var(--sun); letter-spacing: .05em; }
+  .steps h3 { margin: 0; font-size: 20px; }
+  .steps p { margin: 0; color: #b9b9b2; font-size: 15px; }
+  .steps code, .deploy pre { font-family: var(--mono); font-size: 12.5px; }
+  .deploy pre { margin: 0; background: #000; border-radius: 12px; padding: 14px 16px; overflow-x: auto; color: #f1f1ea; line-height: 1.6; }
+  .deploy .btns .pill { background: var(--sun); color: var(--ink); }
+  .deploy .btns .pill.ghost { background: transparent; color: #fff; box-shadow: inset 0 0 0 2px #fff; }
+  .facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .facts div { border-top: 2px solid #333; padding-top: 14px; }
+  .facts b { display: block; font-family: var(--display); font-weight: 400; font-size: clamp(40px, 4.4vw, 64px); line-height: 1; color: #fff; }
+  .facts span { color: #b9b9b2; font-size: 14px; }
+
+  /* Footer */
+  footer { padding-block: 64px 0; overflow: hidden; }
+  .foot { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+  .foot ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+  .foot a { text-decoration: none; }
+  .foot a:hover { color: var(--chili); }
+  .foot .say { display: grid; gap: 22px; align-content: start; }
+  .foot .say p { margin: 0; }
+  .word { font-family: var(--display); text-transform: uppercase; font-size: min(15.6vw, 226px); line-height: .8; margin: 48px 0 0; white-space: nowrap; letter-spacing: -.005em; text-align: center; transform: translateY(6%); }
+
+  /* Motion (desktop, motion allowed; html.motion is set before first paint) */
+  .mega .c { display: inline-block; }
+  .motion .mega .c { animation: rise .9s cubic-bezier(.2,.8,.2,1) backwards; animation-delay: calc(var(--i) * 55ms); }
+  .motion .stage .shape { animation: drop 1.25s linear backwards; animation-delay: calc(.35s + var(--d, 0s)); }
+  .motion .stage .copy, .motion .stage .vert { animation: fadeup .8s .9s cubic-bezier(.2,.8,.2,1) backwards; }
+  .motion .hero .phone { animation: phonein 1s .5s cubic-bezier(.2,.8,.2,1) backwards; visibility: visible; }
+  @keyframes rise { from { transform: translateY(55%); opacity: 0; } }
+  @keyframes fadeup { from { transform: translateY(16px); opacity: 0; } }
+  @keyframes phonein { from { transform: translateX(-50%) translateY(40%); opacity: 0; } }
+  @keyframes drop {
+    0% { transform: translateY(-170%) rotate(-28deg); opacity: 0; animation-timing-function: cubic-bezier(.55,0,1,.45); }
+    12% { opacity: 1; }
+    52% { transform: translateY(0) rotate(4deg); animation-timing-function: cubic-bezier(0,.55,.45,1); }
+    68% { transform: translateY(-14%) rotate(-2deg); animation-timing-function: cubic-bezier(.55,0,1,.45); }
+    82% { transform: translateY(0) rotate(1deg); animation-timing-function: cubic-bezier(0,.55,.45,1); }
+    91% { transform: translateY(-4%) rotate(0deg); animation-timing-function: cubic-bezier(.55,0,1,.45); }
+    100% { transform: none; opacity: 1; }
+  }
+  .motion .statement-run { height: 240vh; }
+  .motion .statement { position: sticky; top: 0; height: 100vh; display: grid; align-items: center; padding-block: 0; }
+  .motion .paren .box { visibility: hidden; }
+  .motion .paren .box.landed { visibility: visible; }
+  .motion .statement .ch { display: inline-block; opacity: 0; transform: translateY(.35em) scale(.9); transition: opacity .22s ease, transform .4s cubic-bezier(.2,.9,.25,1.15); }
+  .motion .statement .ch.on { opacity: 1; transform: none; }
+  .motion .paren > span:not(.box) { display: inline-block; transform: scale(0); transition: transform .5s cubic-bezier(.3,1.6,.5,1); }
+  .motion .paren > span.on { transform: none; }
+  .motion .side .rule { transform: scaleX(0); transform-origin: left; }
+  .motion .side.b .rule { transform-origin: right; }
+  .motion .side .tag, .motion .label-l, .motion .label-r { opacity: 0; }
+  .ghost { position: fixed; left: 0; top: 0; z-index: 2; display: none; place-items: center; background: var(--sun); overflow: hidden; pointer-events: none; will-change: transform, width, height; }
+  .ghost .gshape { position: absolute; }
+  .ghost .stamp { position: relative; z-index: 1; }
+
+  @media (max-width: 960px) {
+    .nav ul { display: none; }
+    .nav { grid-template-columns: 1fr auto; }
+    .stage { grid-template-columns: 1fr; padding: 32px 28px 0; min-height: 0; }
+    .stage .right { grid-column: 1; justify-self: start; align-self: start; }
+    .phone { position: relative; left: auto; top: auto; transform: none; margin: 8px auto -120px; width: min(68vw, 300px); }
+    .phone-slot { display: none; }
+    .hero .phone { order: 3; }
+    .vert { display: none; }
+    .stage .copy { max-width: none; }
+    .side, .label-l, .label-r { display: none; }
+    .cards, .steps, .gallery { grid-template-columns: 1fr; }
+    .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .phones { grid-template-columns: 1fr; }
+    .phones .row { justify-content: center; }
+    .phones .row .phone:nth-child(3) { display: none; }
+    .foot { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ticker .track { animation: none; }
+    html { scroll-behavior: auto; }
+    .pill { transition: none; }
+  }
+</style>
+<script>
+  // Desktop with motion allowed: animate. Set before first paint so nothing flashes.
+  if (matchMedia("(min-width: 961px) and (prefers-reduced-motion: no-preference)").matches) document.documentElement.classList.add("motion");
+</script>
+</head>
+<body>
+
+<header class="wrap nav">
+  <a class="brand mono" href="#top">PurchaseDesk</a>
+  <ul class="mono">
+    <li><a href="#features">( Features )</a></li>
+    <li><a href="#screens">( Screens )</a></li>
+    <li><a href="#flow">( How it flows )</a></li>
+    <li><a href="#deploy">( Deploy )</a></li>
+  </ul>
+  <a class="gh mono" href="https://github.com/Imharsh08/PurchaseDesk-public/">+ ( GitHub )</a>
+</header>
+
+<main id="top">
+  <section class="wrap hero" aria-labelledby="hero-title">
+    <h1 class="mega" id="hero-title" aria-label="PurchaseDesk: purchase management"><span class="c" style="--i:0" aria-hidden="true">P</span><span class="c" style="--i:1" aria-hidden="true">u</span><span class="c" style="--i:2" aria-hidden="true">r</span><span class="c" style="--i:3" aria-hidden="true">c</span><span class="c" style="--i:4" aria-hidden="true">h</span><span class="c" style="--i:5" aria-hidden="true">a</span><span class="c" style="--i:6" aria-hidden="true">s</span><span class="c" style="--i:7" aria-hidden="true">e</span></h1>
+    <div class="stage">
+      <!-- shapes -->
+      <svg class="shape" style="left:-4%;bottom:-14%;width:34%;--d:.15s" viewBox="0 0 200 200" aria-hidden="true"><g fill="#0d0d0d"><circle cx="100" cy="52" r="46"/><circle cx="148" cy="100" r="46"/><circle cx="100" cy="148" r="46"/><circle cx="52" cy="100" r="46"/><circle cx="100" cy="100" r="40"/></g></svg>
+      <svg class="shape" style="left:24%;top:-12%;width:20%;--d:.3s" viewBox="0 0 200 180" aria-hidden="true"><path fill="#e8402a" d="M100 172C40 128 4 96 4 56 4 26 28 4 58 4c18 0 34 9 42 24C108 13 124 4 142 4c30 0 54 22 54 52 0 40-36 72-96 116z"/></svg>
+      <svg class="shape" style="right:6%;top:10%;width:22%;--d:.45s" viewBox="0 0 200 180" aria-hidden="true"><path fill="#e8402a" d="M100 172C40 128 4 96 4 56 4 26 28 4 58 4c18 0 34 9 42 24C108 13 124 4 142 4c30 0 54 22 54 52 0 40-36 72-96 116z"/></svg>
+      <svg class="shape" style="right:-6%;bottom:-17%;width:14%;--d:.6s" viewBox="0 0 200 200" aria-hidden="true"><g fill="#0d0d0d"><circle cx="100" cy="56" r="44"/><circle cx="144" cy="100" r="44"/><circle cx="100" cy="144" r="44"/><circle cx="56" cy="100" r="44"/></g></svg>
+      <svg class="shape" style="left:38%;bottom:6%;width:12%;--d:.75s" viewBox="0 0 200 200" aria-hidden="true"><g fill="#e8402a"><circle cx="100" cy="40" r="34"/><circle cx="152" cy="70" r="34"/><circle cx="152" cy="130" r="34"/><circle cx="100" cy="160" r="34"/><circle cx="48" cy="130" r="34"/><circle cx="48" cy="70" r="34"/><circle cx="100" cy="100" r="44"/></g></svg>
+
+      <div class="vert l mono">+ ( Indent ) + ( Quote ) + ( PO ) + ( GRN ) + ( Bill ) + ( Indent ) + ( Quote ) + ( PO ) +</div>
+      <div class="vert r mono">( FMS ST1–ST9 ) + ( GST ) + ( MSME ) + ( FMS ST1–ST9 ) + ( GST ) +</div>
+
+      <div class="copy">
+        <p class="mono">+ ( PurchaseDesk ) tracks every indent from the first quote to the last payment + so no purchase waits in someone's inbox +</p>
+        <div class="btns">
+          <a class="pill" href="#deploy">Deploy your own
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h9M8.5 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+          <a class="pill ghost" href="https://github.com/Imharsh08/PurchaseDesk-public/">View code</a>
+        </div>
+      </div>
+      <div class="phone-slot" aria-hidden="true"></div>
+      <p class="right copy mono" style="color:var(--chili);margin:0">( Open source · free to host on Cloudflare Pages + Neon · built for Indian GST, for factories that buy every day )</p>
+      <div class="phone"><div class="screen"><span class="sb" aria-hidden="true">9:41</span><img src="img/m-dashboard.webp" width="720" height="1558" alt="PurchaseDesk dashboard on a phone: awaiting approval, quotes being collected, POs to send, spend this month." fetchpriority="high"></div></div>
+    </div>
+  </section>
+
+  <div class="ticker mono" aria-hidden="true">
+    <div class="track">
+      <span>( Indents ) <b>+</b> ( Quotations ) <b>+</b> ( Comparative statement ) <b>+</b> ( Approvals ) <b>+</b> ( Purchase orders ) <b>+</b> ( Goods receipt ) <b>+</b> ( Quality check ) <b>+</b> ( Bills &amp; payments ) <b>+</b> ( Stock ) <b>+</b> ( FMS tracker ) <b>+</b> ( Reports ) <b>+</b></span>
+      <span>( Indents ) <b>+</b> ( Quotations ) <b>+</b> ( Comparative statement ) <b>+</b> ( Approvals ) <b>+</b> ( Purchase orders ) <b>+</b> ( Goods receipt ) <b>+</b> ( Quality check ) <b>+</b> ( Bills &amp; payments ) <b>+</b> ( Stock ) <b>+</b> ( FMS tracker ) <b>+</b> ( Reports ) <b>+</b></span>
+    </div>
+  </div>
+
+  <section class="statement-run" aria-label="From indent to paid">
+   <div class="wrap statement"><div class="st-inner">
+    <span class="label-l mono">What it covers</span>
+    <p class="line">From</p>
+    <p class="line red">Indent</p>
+    <div class="paren" aria-hidden="true">
+      <span class="ast">*</span><span>(</span>
+      <span class="box"><span class="stamp">Approved<small>DRI/26-27/0004</small></span></span>
+      <span>)</span>
+    </div>
+    <p class="line">To paid</p>
+    <span class="label-r mono">Every step timed</span>
+    <div class="side a"><span class="rule"></span><a class="tag" href="#flow">See the flow</a><span class="rule" style="flex:0 0 40px"></span></div>
+    <div class="side b"><span class="rule" style="flex:0 0 40px"></span><a class="tag" href="#screens">See the screens</a><span class="rule"></span></div>
+   </div></div>
+  </section>
+
+  <div class="ticker mono" aria-hidden="true" style="margin-top:0">
+    <div class="track" style="animation-direction:reverse">
+      <span>( Gapless PO numbers ) <b>+</b> ( CGST · SGST · IGST ) <b>+</b> ( 3-way match ) <b>+</b> ( Debit notes ) <b>+</b> ( MSME 45 days ) <b>+</b> ( Approval limits ) <b>+</b> ( Email from your Gmail ) <b>+</b> ( Excel import / export ) <b>+</b></span>
+      <span>( Gapless PO numbers ) <b>+</b> ( CGST · SGST · IGST ) <b>+</b> ( 3-way match ) <b>+</b> ( Debit notes ) <b>+</b> ( MSME 45 days ) <b>+</b> ( Approval limits ) <b>+</b> ( Email from your Gmail ) <b>+</b> ( Excel import / export ) <b>+</b></span>
+    </div>
+  </div>
+
+  <!-- Features -->
+  <section class="wrap block" id="features" aria-labelledby="f-title">
+    <div class="sec-head">
+      <h2 id="f-title">Buy right,<br>on time</h2>
+      <p>Nine steps from a request to a paid bill, each with a person, a deadline and a record. These screenshots are the real app running on demo data.</p>
+    </div>
+
+    <div class="panel">
+      <div class="seg" role="group" aria-label="Theme of the screenshot">
+        <button type="button" aria-pressed="true" data-shot="comparison">Light</button>
+        <button type="button" aria-pressed="false" data-shot="comparison-dark">Dark</button>
+      </div>
+      <div class="browser">
+        <div class="bar"><i></i><i></i><i></i><span>purchasedesk.pages.dev/indents/8</span></div>
+        <img id="shot-a" src="img/comparison.webp" width="1680" height="1050" alt="An indent waiting for approval: three items, the vendor chosen for each, three quotations with delivery days and payment terms, and the FMS steps on the right." loading="lazy">
+      </div>
+    </div>
+    <div class="cards">
+      <article class="card"><span class="n">01</span><h3>Raise an indent</h3><p>Anyone raises a requirement with quantity, need-by date and Normal or Urgent. Items below minimum stock pre-fill one for you.</p></article>
+      <article class="card sun"><span class="n">02</span><h3>Compare, scored</h3><p>Quotes side by side with L1 per item and a recommended vendor scored on price, delivery, quality and payment terms, using real delivery and rejection history.</p><div class="chips"><span>Price 40</span><span>Delivery 30</span><span>Quality 20</span><span>Terms 10</span></div></article>
+      <article class="card"><span class="n">03</span><h3>Approve within limits</h3><p>Each manager has an approval limit incl. GST. Above it, the screen names who can approve. Overrides need a reason; fewer than three quotes need a justification.</p></article>
+    </div>
+
+    <div class="panel" style="margin-top:56px">
+      <div class="browser">
+        <div class="bar"><i></i><i></i><i></i><span>purchasedesk.pages.dev/purchase-orders/7</span></div>
+        <img src="img/po.webp" width="1680" height="1050" alt="Purchase order DRI/26-27/0004: vendor, dispatch confirmed with LR number, IGST lines, and the QC check due now." loading="lazy">
+      </div>
+    </div>
+    <div class="cards">
+      <article class="card"><span class="n">04</span><h3>POs that issue themselves</h3><p>One PO per chosen vendor, numbered without gaps in your format, CGST + SGST or IGST picked from the states, PDF on your letterhead, emailed from your own Gmail.</p><div class="chips"><span>DRI/26-27/0004</span><span>Rev. N amendments</span></div></article>
+      <article class="card ink"><span class="n">05</span><h3>Receive and check</h3><p>Material arrives in lots with invoice and bilty. The quantity and quality check moves accepted stock in; failures raise vendor issues and returns automatically.</p></article>
+      <article class="card"><span class="n">06</span><h3>Bills that match</h3><p>Three-way match of billed qty and rate against the receipt and PO, automatic debit notes, part payments, payables ageing and MSME 45-day due dates.</p></article>
+    </div>
+
+    <div class="panel" style="margin-top:56px">
+      <div class="browser">
+        <div class="bar"><i></i><i></i><i></i><span>purchasedesk.pages.dev/fms</span></div>
+        <img src="img/fms.webp" width="1680" height="1050" alt="FMS tracker: every indent across steps ST1 to ST9 with planned time, actual time and overdue cells in red." loading="lazy">
+      </div>
+    </div>
+    <div class="cards">
+      <article class="card sun"><span class="n">07</span><h3>FMS tracker</h3><p>Every indent through ST1–ST9 against each step's TAT, Sundays skipped, urgent TAT separate. Overdue cells turn red and the next doer gets an email.</p></article>
+      <article class="card"><span class="n">08</span><h3>Stock that asks</h3><p>Daily or weekly counts in packs and loose qty, minimum and re-order levels, what's already on order, and a suggested order rounded to whole packs.</p></article>
+      <article class="card"><span class="n">09</span><h3>Reports to Excel</h3><p>Spend by vendor, item or month, savings, price variance, vendor scorecards, PO and GRN registers and the doer scorecard, each one export away.</p></article>
+    </div>
+  </section>
+
+  <!-- Phones -->
+  <section class="wrap block" aria-labelledby="m-title">
+    <div class="phones">
+      <svg class="shape" style="right:-6%;top:-18%;width:34%" viewBox="0 0 200 200" aria-hidden="true"><g fill="#f6cf1a"><circle cx="100" cy="40" r="34"/><circle cx="152" cy="70" r="34"/><circle cx="152" cy="130" r="34"/><circle cx="100" cy="160" r="34"/><circle cx="48" cy="130" r="34"/><circle cx="48" cy="70" r="34"/><circle cx="100" cy="100" r="44"/></g></svg>
+      <svg class="shape" style="left:-6%;bottom:-40%;width:22%" viewBox="0 0 200 200" aria-hidden="true"><g fill="#0d0d0d"><circle cx="100" cy="56" r="44"/><circle cx="144" cy="100" r="44"/><circle cx="100" cy="144" r="44"/><circle cx="56" cy="100" r="44"/></g></svg>
+      <div style="position:relative;z-index:1">
+        <h2 id="m-title">At the gate,<br>in the store</h2>
+        <p>Every screen works on a phone, so the store team records a delivery where the truck is and the manager approves from anywhere.</p>
+      </div>
+      <div class="row">
+        <div class="phone"><div class="screen"><span class="sb" aria-hidden="true">9:41</span><img src="img/m-po.webp" width="720" height="1558" alt="A purchase order on a phone, with dispatch and LR details." loading="lazy"></div></div>
+        <div class="phone"><div class="screen"><span class="sb" aria-hidden="true">9:41</span><img src="img/m-dashboard.webp" width="720" height="1558" alt="The dashboard on a phone." loading="lazy"></div></div>
+        <div class="phone"><div class="screen"><span class="sb" aria-hidden="true">9:41</span><img src="img/m-fms.webp" width="720" height="1558" alt="The FMS tracker on a phone." loading="lazy"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Gallery -->
+  <section class="wrap block" id="screens" aria-labelledby="s-title">
+    <div class="sec-head">
+      <h2 id="s-title">More screens</h2>
+      <p>Light and dark themes follow the device. Demo company and vendors; no real data.</p>
+    </div>
+    <div class="gallery">
+      <figure>
+        <div class="browser"><img src="img/dashboard.webp" width="1680" height="1050" alt="Dashboard with approvals, FMS overdue steps by step and doer, recent POs and overdue deliveries." loading="lazy"></div>
+        <figcaption><b>Dashboard</b><span>What needs you now</span></figcaption>
+      </figure>
+      <figure>
+        <div class="browser"><img src="img/stock.webp" width="1680" height="1050" alt="Stock list with level bars, out of stock and below minimum badges, and quantity on order." loading="lazy"></div>
+        <figcaption><b>Stock</b><span>Levels, minimums, on order</span></figcaption>
+      </figure>
+      <figure>
+        <div class="browser"><img src="img/vendor.webp" width="1680" height="1050" alt="Vendor page with business value, on-time delivery, delay, rejection and current rates per item." loading="lazy"></div>
+        <figcaption><b>Vendor scorecard</b><span>Rates, delivery, rejection</span></figcaption>
+      </figure>
+      <figure>
+        <div class="browser"><img src="img/dashboard-dark.webp" width="1680" height="1050" alt="The dashboard in dark theme." loading="lazy"></div>
+        <figcaption><b>Dark theme</b><span>Follows your device</span></figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- Flow and architecture -->
+  <section class="wrap block" id="flow" aria-labelledby="d-title">
+    <div class="sec-head">
+      <h2 id="d-title">How it flows</h2>
+      <p>Who does each step, what the app does on its own, and how the pieces are hosted.</p>
+    </div>
+    <div class="diagram">
+      <div class="tabs" role="tablist" aria-label="Diagram">
+        <button type="button" role="tab" id="tab-flow" aria-selected="true" aria-controls="pane-flow">Cross-functional flow</button>
+        <button type="button" role="tab" id="tab-arch" aria-selected="false" aria-controls="pane-arch">Architecture</button>
+      </div>
+      <div id="pane-flow" role="tabpanel" aria-labelledby="tab-flow">
+        <div class="scroll"><svg class="map" viewBox="0 0 1676 792" role="img" aria-label="Swimlane diagram. A requester raises an indent; Purchase sends RFQs, the vendor quotes, Purchase compares quotes and submits them; the Manager approves (or sends back); Purchase sends the PO, the vendor confirms lead time and dispatches while Purchase follows up; Store receives the material and checks quantity and quality, sending rejected material back to the vendor; accepted material is stored and entered in Tally; Accounts enters the bill with a three-way match, passes it and pays. PurchaseDesk scores quotes, checks approval limits, numbers the PO and makes its PDF, logs vendor issues, updates stock and works out debit notes and MSME due dates, and emails the next person at every step.">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path class="head" d="M0,0 L10,5 L0,10 z"/>
+          </marker>
+          <marker id="ah-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path class="head-warn" d="M0,0 L10,5 L0,10 z"/>
+          </marker>
+        </defs>
+
+        <!-- Lanes: 7 × 96px from y=64 -->
+        <rect class="lane-a" x="0" y="64"  width="1676" height="96"/>
+        <rect class="lane-b" x="0" y="160" width="1676" height="96"/>
+        <rect class="lane-a" x="0" y="256" width="1676" height="96"/>
+        <rect class="lane-b" x="0" y="352" width="1676" height="96"/>
+        <rect class="lane-a" x="0" y="448" width="1676" height="96"/>
+        <rect class="lane-b" x="0" y="544" width="1676" height="96"/>
+        <rect class="lane-a" x="0" y="640" width="1676" height="96"/>
+        <g class="lane-rule">
+          <line x1="0" y1="64"  x2="1676" y2="64"/>
+          <line x1="0" y1="160" x2="1676" y2="160"/>
+          <line x1="0" y1="256" x2="1676" y2="256"/>
+          <line x1="0" y1="352" x2="1676" y2="352"/>
+          <line x1="0" y1="448" x2="1676" y2="448"/>
+          <line x1="0" y1="544" x2="1676" y2="544"/>
+          <line x1="0" y1="640" x2="1676" y2="640"/>
+          <line x1="0" y1="736" x2="1676" y2="736"/>
+          <line x1="134" y1="64" x2="134" y2="736"/>
+        </g>
+
+        <!-- Lane names -->
+        <text class="lane-name" x="16" y="108">Requester</text><text class="lane-sub" x="16" y="124">any department</text>
+        <text class="lane-name" x="16" y="204">Purchase</text><text class="lane-sub" x="16" y="220">purchaser</text>
+        <text class="lane-name" x="16" y="300">Manager</text><text class="lane-sub" x="16" y="316">within approval limit</text>
+        <text class="lane-name" x="16" y="396">Vendor</text><text class="lane-sub" x="16" y="412">outside the company</text>
+        <text class="lane-name" x="16" y="492">Store / QC</text><text class="lane-sub" x="16" y="508">warehouse</text>
+        <text class="lane-name" x="16" y="588">Accounts</text><text class="lane-sub" x="16" y="604">bills &amp; payments</text>
+        <text class="lane-name" x="16" y="684">PurchaseDesk</text><text class="lane-sub" x="16" y="700">automatic</text>
+
+        <!-- Phase header (columns: left = 148 + 128·(n−1), width 100) -->
+        <g>
+          <text class="phase-code" x="148" y="24">START</text><text class="phase-name" x="148" y="42">Indent</text>
+          <line class="phase-rule" x1="148" y1="52" x2="248" y2="52"/>
+          <text class="phase-code" x="276" y="24">ST1</text><text class="phase-name" x="276" y="42">Quotations</text>
+          <line class="phase-rule" x1="276" y1="52" x2="632" y2="52"/>
+          <text class="phase-code" x="660" y="24">ST2</text><text class="phase-name" x="660" y="42">Approval</text>
+          <line class="phase-rule" x1="660" y1="52" x2="760" y2="52"/>
+          <text class="phase-code" x="788" y="24">ST3</text><text class="phase-name" x="788" y="42">Send PO</text>
+          <line class="phase-rule" x1="788" y1="52" x2="888" y2="52"/>
+          <text class="phase-code" x="916" y="24">ST4</text><text class="phase-name" x="916" y="42">Follow-up</text>
+          <line class="phase-rule" x1="916" y1="52" x2="1016" y2="52"/>
+          <text class="phase-code" x="1044" y="24">ST5</text><text class="phase-name" x="1044" y="42">Receive</text>
+          <line class="phase-rule" x1="1044" y1="52" x2="1144" y2="52"/>
+          <text class="phase-code" x="1172" y="24">ST6 · ST7</text><text class="phase-name" x="1172" y="42">QC · Return</text>
+          <line class="phase-rule" x1="1172" y1="52" x2="1272" y2="52"/>
+          <text class="phase-code" x="1300" y="24">ST8</text><text class="phase-name" x="1300" y="42">Store · Tally</text>
+          <line class="phase-rule" x1="1300" y1="52" x2="1400" y2="52"/>
+          <text class="phase-code" x="1428" y="24">ST9</text><text class="phase-name" x="1428" y="42">Accounts</text>
+          <line class="phase-rule" x1="1428" y1="52" x2="1656" y2="52"/>
+        </g>
+
+        <!-- Edges (drawn first, boxes sit on top) -->
+        <g>
+          <path class="edge" d="M248,112 H326 V178" marker-end="url(#ah)"/>
+          <text class="edge-label" x="332" y="150">indent</text>
+
+          <path class="edge" d="M376,208 H454 V370" marker-end="url(#ah)"/>
+          <text class="edge-label" x="460" y="300">RFQ email</text>
+
+          <path class="edge" d="M504,400 H552 V238" marker-end="url(#ah)"/>
+          <text class="edge-label" x="546" y="330" text-anchor="end">quotes</text>
+
+          <path class="edge" d="M632,208 H710 V274" marker-end="url(#ah)"/>
+          <text class="edge-label" x="716" y="236">submit</text>
+
+          <path class="edge back" d="M660,318 H618 V238" marker-end="url(#ah)"/>
+          <text class="edge-label" x="624" y="268">send back</text>
+
+          <path class="edge" d="M760,304 H800 V238" marker-end="url(#ah)"/>
+          <text class="edge-label" x="806" y="268">approved</text>
+
+          <path class="edge" d="M860,236 V370" marker-end="url(#ah)"/>
+          <text class="edge-label" x="866" y="330">PO by email</text>
+
+          <path class="edge" d="M888,400 H914" marker-end="url(#ah)"/>
+
+          <path class="edge" d="M888,208 H914" marker-end="url(#ah)"/>
+
+          <path class="edge back" d="M966,236 V370" marker-end="url(#ah)"/>
+          <text class="edge-label" x="972" y="300">chases</text>
+
+          <path class="edge" d="M1016,400 H1094 V466" marker-end="url(#ah)"/>
+          <text class="edge-label" x="1055" y="392" text-anchor="middle">delivery</text>
+
+          <path class="edge" d="M1144,496 H1170" marker-end="url(#ah)"/>
+
+          <path class="edge" d="M1272,496 H1298" marker-end="url(#ah)"/>
+          <text class="edge-label" x="1286" y="486" text-anchor="middle">pass</text>
+
+          <path class="edge fail" d="M1222,468 V430" marker-end="url(#ah-warn)"/>
+          <text class="edge-label fail" x="1228" y="456">fail</text>
+
+          <path class="edge fail" d="M1172,388 H1112 V466" marker-end="url(#ah-warn)"/>
+          <text class="edge-label fail" x="1142" y="380" text-anchor="middle">resend</text>
+
+          <path class="edge" d="M1400,496 H1478 V562" marker-end="url(#ah)"/>
+          <text class="edge-label" x="1484" y="534">bill</text>
+
+          <path class="edge" d="M1528,592 H1554" marker-end="url(#ah)"/>
+        </g>
+
+        <!-- People's steps (box = cx±50, cy±28) -->
+        <g class="step"><rect x="148" y="84" width="100" height="56" rx="6"/>
+          <text class="t" x="198" y="109" text-anchor="middle">Raise indent</text>
+          <text class="s" x="198" y="125" text-anchor="middle">items, need-by</text></g>
+
+        <g class="step"><rect x="276" y="180" width="100" height="56" rx="6"/>
+          <text class="t" x="326" y="205" text-anchor="middle">Send RFQ</text>
+          <text class="s" x="326" y="221" text-anchor="middle">to 3+ vendors</text></g>
+
+        <g class="step ext"><rect x="404" y="372" width="100" height="56" rx="6"/>
+          <text class="t" x="454" y="397" text-anchor="middle">Quote</text>
+          <text class="s" x="454" y="413" text-anchor="middle">rate, delivery</text></g>
+
+        <g class="step"><rect x="532" y="180" width="100" height="56" rx="6"/>
+          <text class="t" x="582" y="205" text-anchor="middle">Compare</text>
+          <text class="s" x="582" y="221" text-anchor="middle">pick vendor/item</text></g>
+
+        <g class="step decide"><rect x="660" y="276" width="100" height="56" rx="6"/>
+          <text class="t" x="710" y="301" text-anchor="middle">Approve</text>
+          <text class="s" x="710" y="317" text-anchor="middle">vendor choice</text></g>
+
+        <g class="step"><rect x="788" y="180" width="100" height="56" rx="6"/>
+          <text class="t" x="838" y="205" text-anchor="middle">Send PO</text>
+          <text class="s" x="838" y="221" text-anchor="middle">from own Gmail</text></g>
+
+        <g class="step ext"><rect x="788" y="372" width="100" height="56" rx="6"/>
+          <text class="t" x="838" y="397" text-anchor="middle">Confirm</text>
+          <text class="s" x="838" y="413" text-anchor="middle">lead time</text></g>
+
+        <g class="step"><rect x="916" y="180" width="100" height="56" rx="6"/>
+          <text class="t" x="966" y="205" text-anchor="middle">Follow up</text>
+          <text class="s" x="966" y="221" text-anchor="middle">until bilty</text></g>
+
+        <g class="step ext"><rect x="916" y="372" width="100" height="56" rx="6"/>
+          <text class="t" x="966" y="397" text-anchor="middle">Dispatch</text>
+          <text class="s" x="966" y="413" text-anchor="middle">invoice + bilty</text></g>
+
+        <g class="step"><rect x="1044" y="468" width="100" height="56" rx="6"/>
+          <text class="t" x="1094" y="493" text-anchor="middle">Receive</text>
+          <text class="s" x="1094" y="509" text-anchor="middle">GRN, in lots</text></g>
+
+        <g class="step decide"><rect x="1172" y="468" width="100" height="56" rx="6"/>
+          <text class="t" x="1222" y="493" text-anchor="middle">QC check</text>
+          <text class="s" x="1222" y="509" text-anchor="middle">qty &amp; quality</text></g>
+
+        <g class="step ext"><rect x="1172" y="372" width="100" height="56" rx="6"/>
+          <text class="t" x="1222" y="397" text-anchor="middle">Take back</text>
+          <text class="s" x="1222" y="413" text-anchor="middle">replace / credit</text></g>
+
+        <g class="step"><rect x="1300" y="468" width="100" height="56" rx="6"/>
+          <text class="t" x="1350" y="493" text-anchor="middle">Store</text>
+          <text class="s" x="1350" y="509" text-anchor="middle">Tally entry</text></g>
+
+        <g class="step"><rect x="1428" y="564" width="100" height="56" rx="6"/>
+          <text class="t" x="1478" y="589" text-anchor="middle">Enter bill</text>
+          <text class="s" x="1478" y="605" text-anchor="middle">3-way match</text></g>
+
+        <g class="step decide"><rect x="1556" y="564" width="100" height="56" rx="6"/>
+          <text class="t" x="1606" y="589" text-anchor="middle">Pass &amp; pay</text>
+          <text class="s" x="1606" y="605" text-anchor="middle">part pay allowed</text></g>
+
+        <!-- What PurchaseDesk does by itself, under the step it serves -->
+        <g class="auto"><rect x="148" y="660" width="100" height="56" rx="6"/>
+          <text class="t" x="198" y="685" text-anchor="middle">Low stock</text>
+          <text class="s" x="198" y="701" text-anchor="middle">suggests indent</text></g>
+        <g class="auto"><rect x="532" y="660" width="100" height="56" rx="6"/>
+          <text class="t" x="582" y="685" text-anchor="middle">Scores quotes</text>
+          <text class="s" x="582" y="701" text-anchor="middle">L1, recommends</text></g>
+        <g class="auto"><rect x="660" y="660" width="100" height="56" rx="6"/>
+          <text class="t" x="710" y="685" text-anchor="middle">Checks limit</text>
+          <text class="s" x="710" y="701" text-anchor="middle">names who can</text></g>
+        <g class="auto"><rect x="788" y="660" width="100" height="56" rx="6"/>
+          <text class="t" x="838" y="685" text-anchor="middle">PO no. + PDF</text>
+          <text class="s" x="838" y="701" text-anchor="middle">GST split</text></g>
+        <g class="auto"><rect x="1172" y="660" width="100" height="56" rx="6"/>
+          <text class="t" x="1222" y="685" text-anchor="middle">Vendor issue</text>
+          <text class="s" x="1222" y="701" text-anchor="middle">short / rejected</text></g>
+        <g class="auto"><rect x="1300" y="660" width="100" height="56" rx="6"/>
+          <text class="t" x="1350" y="685" text-anchor="middle">Stock + rates</text>
+          <text class="s" x="1350" y="701" text-anchor="middle">updated</text></g>
+        <g class="auto"><rect x="1428" y="660" width="100" height="56" rx="6"/>
+          <text class="t" x="1478" y="685" text-anchor="middle">Debit note</text>
+          <text class="s" x="1478" y="701" text-anchor="middle">MSME due date</text></g>
+
+        <!-- Runs under every step -->
+        <g class="band">
+          <rect x="148" y="748" width="1508" height="32" rx="6"/>
+          <text x="164" y="769">Every step: emails the next step's doers  ·  FMS records planned vs actual time and the doer  ·  dashboard shows what is overdue</text>
+        </g>
+      </svg></div>
+        <p class="cap">Lanes are roles; columns are the FMS steps. Yellow boxes are decisions; dashed boxes in the bottom lane are what PurchaseDesk works out by itself. Scroll sideways on a small screen.</p>
+      </div>
+      <div id="pane-arch" role="tabpanel" aria-labelledby="tab-arch" hidden>
+        <div class="scroll"><svg class="arch" viewBox="0 0 1240 640" role="img" aria-label="Architecture. Your team uses the web app, a React and Vite app on Cloudflare Pages that also reads invoices and handles Excel in the browser. It calls the API over HTTPS with a bearer token. The API, a Hono app on Neon Functions, checks sign-in and roles, loads screen data, runs actions, serves files and asks Gemini to read invoices. It stores records in Neon Postgres through Prisma and files in Neon Object Storage over the S3 API. It talks to Google for sign-in and to send email from each user's Gmail to vendors. An alternative Next.js version can run on Cloudflare Workers against the same database through Hyperdrive.">
+          <defs>
+            <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path class="head" d="M0,0 L10,5 L0,10 z"/>
+            </marker>
+          </defs>
+
+          <!-- Edges first -->
+          <path class="edge" d="M170,104 V168" marker-end="url(#ah2)"/>
+          <text class="edge-label" x="178" y="142">opens in browser</text>
+
+          <path class="edge" d="M300,290 H418" marker-end="url(#ah2)"/>
+          <text class="edge-label" x="359" y="280" text-anchor="middle">HTTPS · JSON</text>
+          <text class="edge-label" x="359" y="308" text-anchor="middle">Bearer token</text>
+
+          <path class="edge" d="M720,226 H838" marker-end="url(#ah2)"/>
+          <text class="edge-label" x="779" y="216" text-anchor="middle">Prisma, pooled</text>
+
+          <path class="edge" d="M720,366 H838" marker-end="url(#ah2)"/>
+          <text class="edge-label" x="779" y="356" text-anchor="middle">S3 API</text>
+
+          <path class="edge" d="M500,432 V508" marker-end="url(#ah2)"/>
+          <text class="edge-label" x="508" y="476">sign-in, send mail</text>
+
+          <path class="edge" d="M680,432 V508" marker-end="url(#ah2)"/>
+          <text class="edge-label" x="688" y="476">invoice file</text>
+
+          <path class="edge" d="M418,540 H302" marker-end="url(#ah2)"/>
+          <text class="edge-label" x="360" y="530" text-anchor="middle">PO, RFQ</text>
+
+          <path class="edge alt" d="M1020,104 V178" marker-end="url(#ah2)"/>
+          <text class="edge-label" x="1028" y="142">Hyperdrive</text>
+
+          <!-- People -->
+          <g class="box ext"><rect x="40" y="48" width="260" height="56" rx="8"/>
+            <text class="t" x="60" y="72">Your team</text>
+            <text class="s" x="60" y="90">browser on desk or phone</text></g>
+
+          <!-- Web app -->
+          <g class="box"><rect x="40" y="170" width="260" height="250" rx="10"/>
+            <text class="t" x="60" y="196">Web app</text>
+            <text class="s" x="60" y="214">React + Vite · Cloudflare Pages</text></g>
+          <g class="chip"><rect x="56" y="230" width="228" height="34" rx="5"/><text x="70" y="252">Screens and forms</text></g>
+          <g class="chip"><rect x="56" y="272" width="228" height="34" rx="5"/><text x="70" y="294">Invoice reading (PDF text, OCR)</text></g>
+          <g class="chip"><rect x="56" y="314" width="228" height="34" rx="5"/><text x="70" y="336">Excel import and export</text></g>
+          <g class="chip"><rect x="56" y="356" width="228" height="34" rx="5"/><text x="70" y="378">Session token (12 hours)</text></g>
+
+          <!-- Neon project -->
+          <g class="group"><rect x="396" y="148" width="824" height="306" rx="14"/>
+            <text x="412" y="168">NEON PROJECT · ONE BRANCH</text></g>
+
+          <g class="box"><rect x="420" y="180" width="300" height="252" rx="10"/>
+            <text class="t" x="440" y="206">API</text>
+            <text class="s" x="440" y="224">Hono · Neon Functions (Node)</text></g>
+          <g class="chip"><rect x="436" y="236" width="268" height="30" rx="5"/><text x="450" y="256">Sign-in, roles, approval limits</text></g>
+          <g class="chip"><rect x="436" y="272" width="268" height="30" rx="5"/><text x="450" y="292">Screen data</text></g>
+          <g class="chip"><rect x="436" y="308" width="268" height="30" rx="5"/><text x="450" y="328">Actions: validate, save, audit, notify</text></g>
+          <g class="chip"><rect x="436" y="344" width="268" height="30" rx="5"/><text x="450" y="364">Files and PO PDFs</text></g>
+          <g class="chip"><rect x="436" y="380" width="268" height="30" rx="5"/><text x="450" y="400">AI invoice reading (optional)</text></g>
+
+          <g class="box store"><rect x="840" y="180" width="360" height="92" rx="10"/>
+            <text class="t" x="860" y="214">Neon Postgres</text>
+            <text class="s" x="860" y="234">indents, quotes, POs, receipts, bills,</text>
+            <text class="s" x="860" y="252">stock, users, audit log</text></g>
+
+          <g class="box store"><rect x="840" y="320" width="360" height="92" rx="10"/>
+            <text class="t" x="860" y="354">Neon Object Storage</text>
+            <text class="s" x="860" y="374">PO PDFs, logos, invoices, bilties,</text>
+            <text class="s" x="860" y="392">quotation files</text></g>
+
+          <!-- Alternative host -->
+          <g class="box alt"><rect x="840" y="40" width="360" height="64" rx="8"/>
+            <text class="t" x="860" y="66">Alternative: Next.js version</text>
+            <text class="s" x="860" y="86">server-rendered, on Cloudflare Workers</text></g>
+
+          <!-- Outside services -->
+          <g class="box ext"><rect x="420" y="510" width="180" height="60" rx="8"/>
+            <text class="t" x="436" y="536">Google</text>
+            <text class="s" x="436" y="554">sign-in · Gmail API</text></g>
+          <g class="box ext"><rect x="620" y="510" width="160" height="60" rx="8"/>
+            <text class="t" x="636" y="536">Gemini API</text>
+            <text class="s" x="636" y="554">optional</text></g>
+          <g class="box ext"><rect x="40" y="510" width="260" height="60" rx="8"/>
+            <text class="t" x="60" y="536">Vendors</text>
+            <text class="s" x="60" y="554">email from the user's own Gmail</text></g>
+
+          <!-- How it ships -->
+          <g class="band">
+            <rect x="40" y="596" width="1160" height="32" rx="6"/>
+            <text x="56" y="617">Ship it: push to GitHub → Pages builds web/dist  ·  npm run api:deploy → API  ·  npm run db:deploy → database migrations</text>
+          </g>
+        </svg></div>
+        <p class="cap">The browser app is static files on Cloudflare Pages. Everything that touches data or secrets runs in one API next to the database, inside a single Neon project. Google and Gemini are optional.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Deploy -->
+  <section class="wrap block" id="deploy" aria-labelledby="dp-title">
+    <div class="deploy">
+      <div>
+        <h2 id="dp-title">Run it for<br><em>your plant</em></h2>
+        <p class="lead">Free plans on Neon and Cloudflare cover a typical purchase team. No Google account needed: admins create users with email and password.</p>
+      </div>
+      <ol class="steps">
+        <li><span class="k">STEP 1 · NEON</span><h3>Database and first admin</h3><p>Create a Neon project, link it, create the tables and your admin login.</p><pre>neon link
+npm run db:deploy
+npm run db:seed</pre></li>
+        <li><span class="k">STEP 2 · NEON FUNCTION</span><h3>Deploy the API</h3><p>One command deploys the API next to the database; set your Pages address and a session secret once.</p><pre>npm run api:build
+neon functions deploy api \
+  --env WEB_APP_URL=https://you.pages.dev</pre></li>
+        <li><span class="k">STEP 3 · CLOUDFLARE PAGES</span><h3>Connect the repo</h3><p>Build command <code>npm run web:build</code>, output <code>web/dist</code>, and <code>VITE_API_URL</code> set to the API address. Every push redeploys.</p></li>
+      </ol>
+      <div class="facts">
+        <div><b>9</b><span>FMS steps, each timed against its TAT</span></div>
+        <div><b>5</b><span>roles: admin, manager, purchaser, warehouse, accounts</span></div>
+        <div><b>172</b><span>unit tests for GST maths, scoring, units, invoices</span></div>
+        <div><b>₹0</b><span>hosting on the free plans for a typical team</span></div>
+      </div>
+      <div class="btns">
+        <a class="pill" href="https://github.com/Imharsh08/PurchaseDesk-public/">Get the code</a>
+        <a class="pill ghost" href="https://github.com/Imharsh08/PurchaseDesk-public#deploy-to-cloudflare-pages--neon">Read the setup guide</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <ul class="mono">
+      <li><a href="#top">Home</a></li>
+      <li><a href="#features">Features</a></li>
+      <li><a href="#screens">Screens</a></li>
+      <li><a href="#flow">How it flows</a></li>
+      <li><a href="#deploy">Deploy</a></li>
+      <li><a href="https://github.com/Imharsh08/PurchaseDesk-public/">GitHub</a></li>
+    </ul>
+    <div class="say mono">
+      <p>Purchase management for manufacturers.<br>Indent to payment, every step timed.</p>
+      <p>Built with Next.js, React, Prisma and Postgres.<br>Hosted on Cloudflare Pages and Neon.</p>
+      <p>Open source · Screens show demo data</p>
+    </div>
+  </div>
+  <p class="word" aria-hidden="true">PurchaseDesk</p>
+</footer>
+
+<script>
+  // Light / dark screenshot switch
+  document.querySelectorAll("[data-shot]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      document.getElementById("shot-a").src = "img/" + btn.dataset.shot + ".webp";
+      document.querySelectorAll("[data-shot]").forEach(function (b) { b.setAttribute("aria-pressed", String(b === btn)); });
+    });
+  });
+
+  // Hero → statement: as you scroll, the yellow stage shrinks into the box of the statement, its shapes
+  // fall away, the phone sinks, and the box lands as the "Approved" stamp. The statement then holds
+  // (sticky) while its words type in and the lines and buttons appear.
+  (function () {
+    var root = document.documentElement;
+    var mq = matchMedia("(min-width: 961px) and (prefers-reduced-motion: no-preference)");
+    var stage = document.querySelector(".stage");
+    var phone = stage.querySelector(".phone");
+    var box = document.querySelector(".paren .box");
+    var run = document.querySelector(".statement-run");
+    var fades = [].slice.call(stage.querySelectorAll(".copy, .vert"));
+    var parts = [].slice.call(document.querySelectorAll(".paren > span:not(.box)"));
+    var rules = [].slice.call(document.querySelectorAll(".side .rule"));
+    var extras = [].slice.call(document.querySelectorAll(".side .tag, .label-l, .label-r"));
+    var ghost = null, gshapes = [], gstamp = null, chars = [], on = false, queued = false;
+
+    var clamp = function (v) { return v < 0 ? 0 : v > 1 ? 1 : v; };
+    var ease = function (t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; };
+
+    function build() {
+      if (ghost) return;
+      ghost = document.createElement("div");
+      ghost.className = "ghost";
+      ghost.setAttribute("aria-hidden", "true");
+      stage.querySelectorAll(".shape").forEach(function (s) {
+        var c = s.cloneNode(true);
+        c.setAttribute("class", "gshape");
+        ghost.appendChild(c);
+        gshapes.push(c);
+      });
+      gstamp = box.querySelector(".stamp").cloneNode(true);
+      ghost.appendChild(gstamp);
+      document.body.appendChild(ghost);
+      // Type-in letters for the statement words (screen readers keep the plain words).
+      document.querySelectorAll(".statement .line").forEach(function (line) {
+        var text = line.textContent;
+        line.textContent = "";
+        var sr = document.createElement("span");
+        sr.textContent = text;
+        sr.style.cssText = "position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)";
+        line.appendChild(sr);
+        text.split("").forEach(function (ch) {
+          var s = document.createElement("span");
+          s.className = "ch";
+          s.setAttribute("aria-hidden", "true");
+          s.textContent = ch === " " ? " " : ch;
+          line.appendChild(s);
+          chars.push(s);
+        });
+      });
+    }
+
+    function frame() {
+      queued = false;
+      if (!on) return;
+      var vh = innerHeight, y = scrollY;
+      var sr = stage.getBoundingClientRect(), br = box.getBoundingClientRect(), rr = run.getBoundingClientRect();
+      var s0 = sr.top + y - 0.12 * vh;          // morph starts: stage near the top
+      var s1 = rr.top + y;                      // morph ends: statement reaches the top and holds
+      var p = clamp((y - s0) / Math.max(1, s1 - s0));
+      var fade = clamp((y - (s0 - 0.3 * vh)) / (0.3 * vh));
+      var pt = clamp((y - s1) / (0.9 * vh));    // statement reveal while it holds
+
+      fades.forEach(function (el) { el.style.opacity = String(1 - fade); });
+      phone.style.transform = "translateX(-50%) translateY(" + (ease(clamp(p / 0.45)) * 60).toFixed(2) + "%)";
+      phone.style.opacity = String(1 - clamp(p / 0.35));
+
+      if (p <= 0 || p >= 1) {
+        ghost.style.display = "none";
+        stage.style.visibility = p >= 1 ? "hidden" : "";
+        box.classList.toggle("landed", p >= 1);
+      } else {
+        var e = ease(p);
+        stage.style.visibility = "hidden";
+        box.classList.remove("landed");
+        ghost.style.display = "grid";
+        ghost.style.width = sr.width + (br.width - sr.width) * e + "px";
+        ghost.style.height = sr.height + (br.height - sr.height) * e + "px";
+        ghost.style.transform = "translate(" + (sr.left + (br.left - sr.left) * e) + "px," + (sr.top + (br.top - sr.top) * e) + "px)";
+        ghost.style.borderRadius = 32 - 14 * e + "px";
+        var fall = clamp(p / 0.6);
+        gshapes.forEach(function (s, i) {
+          s.style.opacity = String(1 - fall);
+          s.style.transform = "translateY(" + (ease(fall) * 90).toFixed(1) + "%) rotate(" + ((i % 2 ? 1 : -1) * fall * 40).toFixed(1) + "deg) scale(" + (1 - fall * 0.45).toFixed(3) + ")";
+        });
+        var stamp = clamp((p - 0.62) / 0.38);
+        gstamp.style.opacity = String(stamp);
+        gstamp.style.transform = "rotate(-9deg) scale(" + (0.5 + 0.5 * ease(stamp)).toFixed(3) + ")";
+      }
+
+      var shown = Math.round(clamp(pt / 0.55) * chars.length);
+      chars.forEach(function (c, i) { c.classList.toggle("on", i < shown); });
+      parts.forEach(function (el) { el.classList.toggle("on", p >= 1); });
+      var k = clamp((pt - 0.5) / 0.3);
+      rules.forEach(function (el) { el.style.transform = "scaleX(" + ease(k).toFixed(3) + ")"; });
+      var x = clamp((pt - 0.65) / 0.25);
+      extras.forEach(function (el) { el.style.opacity = String(x); el.style.transform = "translateY(" + ((1 - x) * 12).toFixed(1) + "px)"; });
+    }
+
+    function queue() { if (!queued) { queued = true; requestAnimationFrame(frame); } }
+
+    function apply() {
+      on = mq.matches;
+      root.classList.toggle("motion", on);
+      if (on) {
+        build();
+        ghost.style.fontSize = getComputedStyle(box.parentNode).fontSize;
+        frame();
+        return;
+      }
+      // Static layout: clear everything the animation set.
+      [stage, phone, box].concat(fades, rules, extras).forEach(function (el) { el.style.visibility = el.style.opacity = el.style.transform = ""; });
+      box.classList.remove("landed");
+      if (ghost) ghost.style.display = "none";
+    }
+
+    addEventListener("scroll", queue, { passive: true });
+    addEventListener("resize", function () { if (on) ghost.style.fontSize = getComputedStyle(box.parentNode).fontSize; queue(); });
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+    apply();
+  })();
+
+  // Diagram tabs
+  var tabs = document.querySelectorAll('[role="tab"]');
+  tabs.forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      tabs.forEach(function (t) {
+        var on = t === tab;
+        t.setAttribute("aria-selected", String(on));
+        document.getElementById(t.getAttribute("aria-controls")).hidden = !on;
+      });
+    });
+  });
+</script>
+</body>
+</html>
