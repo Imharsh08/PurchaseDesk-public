@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PurchaseDesk</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="min-h-full antialiased">
+    <!-- Shown from the first paint until the app mounts; the same look as src/components/splash.tsx. -->
+    <style>
+      @keyframes pd-slide { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+      .pd-splash { display: grid; place-items: center; min-height: 100vh; background: #faf8f4; color: #171b20; font-family: "IBM Plex Sans", system-ui, sans-serif; }
+      .pd-splash > div { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+      .pd-mark { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 12px; background: #1e3a5f; color: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
+      .pd-name { font-family: "Space Grotesk", system-ui, sans-serif; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+      .pd-track { width: 160px; height: 4px; border-radius: 999px; background: #f2eee7; overflow: hidden; }
+      .pd-track > div { width: 33%; height: 100%; border-radius: 999px; background: #1e3a5f; animation: pd-slide 1.1s ease-in-out infinite; }
+      .pd-note { font-size: 12px; color: #4e4943; }
+      @media (prefers-reduced-motion: reduce) { .pd-track > div { animation: none; width: 100%; } }
+    </style>
+    <div id="root">
+      <div class="pd-splash" role="status">
+        <div>
+          <div class="pd-mark">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Z" /><path d="M4 7.5 12 12l8-4.5M12 12v9" />
+            </svg>
+          </div>
+          <div class="pd-name">PurchaseDesk</div>
+          <div class="pd-track"><div></div></div>
+          <div class="pd-note">Opening PurchaseDesk…</div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

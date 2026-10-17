@@ -1,0 +1,33 @@
+/** Letterhead defaults before the company settings are saved (no database: shared by server and browser). */
+import type { CompanySettings } from "@/generated/prisma/client";
+
+export const DEFAULT_COMPANY: CompanySettings = {
+  id: 1,
+  name: "Your Company",
+  address: null,
+  city: null,
+  state: null,
+  stateCode: null,
+  pincode: null,
+  gstin: null,
+  pan: null,
+  phone: null,
+  email: null,
+  website: null,
+  logoPath: null,
+  logo2Path: null,
+  billingDetails: null,
+  poPrefix: "PO",
+  poNumberStyle: "YEAR_CONTINUOUS",
+  defaultTerms: null,
+  signatoryTitle: null,
+  signatoryName: null,
+  signatoryPhone: null,
+  signatoryEmail: null,
+  tat: null,
+  tatCountSundays: false,
+  notifications: null,
+  transport: null,
+  deletePasswordHash: null,
+  updatedAt: new Date(0),
+};

@@ -1,0 +1,15 @@
+/* The same theme as the Next app, plus the fonts it loads with next/font. */
+@import "../../src/app/globals.css";
+
+/* Tailwind scans these for class names: the shared components, the screens' own parts (forms,
+   FMS grid … under src/app) and the web app itself. */
+@source "../../src/components";
+@source "../../src/lib";
+@source "../../src/app";
+@source "./";
+
+:root {
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", "IBM Plex Sans", ui-sans-serif, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}

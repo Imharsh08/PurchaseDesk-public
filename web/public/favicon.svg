@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- The PurchaseDesk mark (src/components/logo.tsx) for browser tabs; the top face in signal orange. Also src/app/icon.svg. -->
+  <rect width="32" height="32" rx="7" fill="#1E3A5F"/>
+  <g transform="translate(4.5 4.5) scale(0.96)" stroke="#fff" stroke-width="2.3" stroke-linejoin="round" fill="none">
+    <path d="M4 7.5 12 3l8 4.5L12 12 4 7.5Z" fill="#F07A2E"/>
+    <path d="M4 7.5v9L12 21l8-4.5v-9M12 12v9"/>
+  </g>
+</svg>

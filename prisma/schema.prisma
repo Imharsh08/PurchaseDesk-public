@@ -1,0 +1,901 @@
+// PurchaseDesk schema. See DATABASE_SCHEMA.md for the full target model;
+// this file covers the foundation, indents, quotations and purchase orders.
+
+generator client {
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  // Load relations with SQL joins: one query per findMany/include instead of one per relation.
+  previewFeatures = ["relationJoins"]
+  // Loads the query engine as a static WebAssembly import, which Cloudflare Workers require.
+  runtime  = "cloudflare"
+}
+
+// Same client for plain Node scripts (seed), which can't load the Workers-style engine import.
+generator scripts {
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma-node"
+  previewFeatures = ["relationJoins"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  PURCHASER
+  WAREHOUSE
+  ACCOUNTS
+}
+
+enum POStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SENT
+  ACKNOWLEDGED
+  PARTIALLY_RECEIVED
+  COMPLETED
+  CANCELLED
+}
+
+// INTRA_STATE -> CGST + SGST, INTER_STATE -> IGST
+enum TaxMode {
+  INTRA_STATE
+  INTER_STATE
+}
+
+enum IndentStatus {
+  DRAFT
+  OPEN // submitted; collecting quotations
+  PENDING_APPROVAL // comparative statement submitted to a manager
+  APPROVED // vendors selected; POs not yet created
+  ORDERED // POs created
+  CANCELLED
+}
+
+enum IndentPriority {
+  NORMAL
+  URGENT
+}
+
+enum Certification {
+  ISO_9001
+  ISO_OTHER // ISO 14001 / 45001 etc.
+  CUSTOMER // customer-approved / customer certification
+  NONE
+}
+
+enum DocumentType {
+  PO_PDF
+  QUOTATION
+  BILTY
+  INVOICE
+  QUALITY_CERT
+  OTHER
+}
+
+enum DocumentStatus {
+  ACTIVE
+  SUPERSEDED
+}
+
+// Goods receipt: material arrives (store) → quantity & quality check → accepted qty goes into stock
+enum GrnStatus {
+  PENDING_QC
+  COMPLETED
+  CANCELLED
+}
+
+enum CheckResult {
+  PASS
+  FAIL
+}
+
+enum IssueType {
+  SHORT_QTY
+  EXCESS_QTY
+  QUALITY
+  DAMAGED
+  WRONG_ITEM
+  LATE_DELIVERY
+  DOCUMENTS
+  RATE_MISMATCH
+  OTHER
+}
+
+enum IssueStatus {
+  OPEN
+  RESOLVED
+}
+
+enum StockEntryKind {
+  COUNT // physical count entered by the store (absolute quantity)
+  RECEIPT // accepted quantity from a goods receipt (added to stock)
+}
+
+enum RateSource {
+  MANUAL
+  QUOTATION
+  PO
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  name         String
+  email        String   @unique
+  // Null for users who only sign in with Google
+  passwordHash String?  @map("password_hash")
+  // A person can hold several roles (e.g. purchase + warehouse); they get every permission any of them allows.
+  roles        Role[]   @default([PURCHASER])
+  department   String?
+  active       Boolean  @default(true)
+  // Delegation of authority: highest value (incl. GST) this user may approve. Null = no limit.
+  approvalLimit Decimal? @map("approval_limit") @db.Decimal(15, 2)
+  // "Send as me": Google refresh token for the Gmail API (gmail.send), AES-GCM encrypted
+  gmailToken       String?   @map("gmail_token")
+  gmailConnectedAt DateTime? @map("gmail_connected_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  posCreated        PurchaseOrder[] @relation("POCreatedBy")
+  posApproved       PurchaseOrder[] @relation("POApprovedBy")
+  posSent           PurchaseOrder[] @relation("POSentBy")
+  indentsRequested  Indent[]        @relation("IndentRequestedBy")
+  indentsSubmitted  Indent[]        @relation("IndentComparisonBy")
+  indentsApproved   Indent[]        @relation("IndentApprovedBy")
+  quotationsCreated Quotation[]
+  stockCounts       StockCount[]
+  itemsStockUpdated Item[]          @relation("ItemStockUpdatedBy")
+  documents         Document[]
+  auditLogs         AuditLog[]
+  grnsReceived      GoodsReceipt[]  @relation("GrnReceivedBy")
+  amendmentsRequested PoAmendment[] @relation("AmendmentRequestedBy")
+  amendmentsDecided   PoAmendment[] @relation("AmendmentDecidedBy")
+  billsCreated        Bill[]        @relation("BillCreatedBy")
+  billsPassed         Bill[]        @relation("BillPassedBy")
+  payments            Payment[]
+  grnsChecked       GoodsReceipt[]  @relation("GrnCheckedBy")
+  grnsReturned      GoodsReceipt[]  @relation("GrnReturnedBy")
+  grnsStored        GoodsReceipt[]  @relation("GrnStoredBy")
+  issuesRaised      VendorIssue[]   @relation("IssueRaisedBy")
+  issuesResolved    VendorIssue[]   @relation("IssueResolvedBy")
+
+  @@map("users")
+}
+
+// Single-row table (id = 1) holding the buyer's letterhead details.
+model CompanySettings {
+  id             Int      @id @default(1)
+  name           String
+  address        String?
+  city           String?
+  state          String?
+  stateCode      String?  @map("state_code") // 2-digit GST state code, e.g. "06"
+  pincode        String?
+  gstin          String?
+  pan            String?
+  phone          String?
+  email          String?
+  website        String?
+  logoPath       String?  @map("logo_path")
+  // Second letterhead logo, printed in the centre of the PO header
+  logo2Path      String?  @map("logo2_path")
+  // Printed verbatim in the PO's "Billing Details" box; first line is bold
+  billingDetails String?  @map("billing_details")
+  poPrefix       String   @default("PO") @map("po_prefix")
+  // YEAR_CONTINUOUS: PO-2026-0086 (sequence never resets). FY_RESET: PO/2026-27/0001.
+  poNumberStyle  String   @default("YEAR_CONTINUOUS") @map("po_number_style")
+  defaultTerms   String?  @map("default_terms")
+  signatoryTitle String?  @map("signatory_title")
+  signatoryName  String?  @map("signatory_name")
+  signatoryPhone String?  @map("signatory_phone")
+  signatoryEmail String?  @map("signatory_email")
+  // FMS turnaround time per step: { [step]: { normal: hours, urgent: hours } }
+  tat             Json?
+  // false = Sundays are not counted in TAT
+  tatCountSundays Boolean  @default(false) @map("tat_count_sundays")
+  // Email notifications per event: { [event]: { on, doers, to[], cc[], attach[] } } (src/lib/notification-events.ts)
+  notifications   Json?
+  // Inward transport (Settings → Transport): { destination, routes: [{ city, name }] } — which transporters
+  // bring material from each vendor city to our shipping address (src/lib/transport.ts)
+  transport       Json?
+  // bcrypt hash of the shared password that permanently deletes records (see DELETE_ADMIN_EMAILS)
+  deletePasswordHash String? @map("delete_password_hash")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("company_settings")
+}
+
+// Address book for the PO's "Billing Details" and "Shipping Address" boxes. The doer picks one of
+// each per PO; the text is copied onto the PO so later edits don't change issued orders.
+model CompanyAddress {
+  id              Int      @id @default(autoincrement())
+  // Short name for the picker, e.g. "Plant 2 – Pune"
+  label           String
+  // Printed as entered; the first line is bold
+  details         String
+  defaultBilling  Boolean  @default(false) @map("default_billing")
+  defaultShipping Boolean  @default(false) @map("default_shipping")
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([active])
+  @@map("company_addresses")
+}
+
+model Vendor {
+  id            Int           @id @default(autoincrement())
+  code          String        @unique
+  name          String
+  contactPerson String?       @map("contact_person")
+  email         String?
+  phone         String?
+  address       String?
+  city          String?
+  state         String?
+  stateCode     String?       @map("state_code")
+  pincode       String?
+  gstin         String?
+  pan           String?
+  paymentTerms  String?       @map("payment_terms")
+  leadTimeDays  Int?          @map("lead_time_days")
+  // Transporter / courier this vendor sends with; empty = the first one listed for its city (Settings → Transport)
+  preferredTransport String?  @map("preferred_transport")
+  // Agreed credit period; drives bill due dates when the PO has none
+  creditDays    Int?          @map("credit_days")
+  // MSMED Act: registered micro/small enterprises must be paid within 45 days of acceptance
+  msme          Boolean       @default(false)
+  msmeNumber    String?       @map("msme_number")
+  msmeCategory  String?       @map("msme_category")
+  certification Certification @default(NONE)
+  active        Boolean       @default(true)
+  notes         String?
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  purchaseOrders PurchaseOrder[]
+  quotations     Quotation[]
+  items          VendorItem[]
+  goodsReceipts  GoodsReceipt[]
+  issues         VendorIssue[]
+  bills          Bill[]
+
+  @@index([active])
+  @@map("vendors")
+}
+
+// Which vendor supplies which item, and at what rate. Kept current automatically from
+// quotations and issued POs; can also be maintained by hand (agreed rate, vendor's code).
+model VendorItem {
+  id             Int        @id @default(autoincrement())
+  vendorId       Int        @map("vendor_id")
+  vendor         Vendor     @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  itemId         Int        @map("item_id")
+  item           Item       @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  vendorItemCode String?    @map("vendor_item_code")
+  // Current rate per item uom, excluding GST (net of discount)
+  rate           Decimal?   @db.Decimal(15, 2)
+  rateSource     RateSource @default(MANUAL) @map("rate_source")
+  rateDate       DateTime?  @map("rate_date") @db.Date
+  leadTimeDays   Int?       @map("lead_time_days")
+  preferred      Boolean    @default(false)
+  active         Boolean    @default(true)
+  notes          String?
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+
+  @@unique([vendorId, itemId])
+  @@index([itemId])
+  @@map("vendor_items")
+}
+
+model Item {
+  id             Int      @id @default(autoincrement())
+  sku            String   @unique
+  name           String
+  description    String?
+  category       String?
+  uom            String
+  hsnCode        String?  @map("hsn_code")
+  gstRate        Decimal  @default(18) @map("gst_rate") @db.Decimal(5, 2)
+  specifications String?
+  // How this item always comes, whatever the vendor (e.g. "Courier" for small parcels); beats the
+  // vendor's and city's transporter on POs (src/lib/transport.ts)
+  preferredTransport String? @map("preferred_transport")
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // ── Stock settings (all in the item's uom) ─────────────────────────────
+  minStock         Decimal?  @map("min_stock") @db.Decimal(14, 3)
+  reorderQty       Decimal?  @map("reorder_qty") @db.Decimal(14, 3)
+  // Standard pack: 1 packUnit = packSize uom, e.g. 1 Bale = 25 Kg, 1 Drum = 200 Ltr
+  packUnit         String?   @map("pack_unit")
+  packSize         Decimal?  @map("pack_size") @db.Decimal(14, 3)
+  // Latest counted stock (denormalised from StockCount for the dashboard)
+  currentStock     Decimal?  @map("current_stock") @db.Decimal(14, 3)
+  stockUpdatedAt   DateTime? @map("stock_updated_at")
+  stockUpdatedById Int?      @map("stock_updated_by")
+  stockUpdatedBy   User?     @relation("ItemStockUpdatedBy", fields: [stockUpdatedById], references: [id])
+
+  poItems     PoItem[]
+  indentItems IndentItem[]
+  stockCounts StockCount[]
+  vendors     VendorItem[]
+  grnItems    GoodsReceiptItem[]
+  issues      VendorIssue[]
+  units       ItemUnit[]
+
+  @@index([category])
+  @@index([active])
+  @@map("items")
+}
+
+// Other units an item is indented / ordered in, and what they are in the item's own unit
+// (e.g. N550 Carbon kept in Bag, ordered in Kg: 1 Kg = 0.04 Bag). Kg/g/Ton and Ltr/ml convert
+// by themselves; only packs and item-specific sizes need a row.
+model ItemUnit {
+  id     Int     @id @default(autoincrement())
+  itemId Int     @map("item_id")
+  item   Item    @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  unit   String
+  // 1 unit = factor × the item's uom
+  factor Decimal @db.Decimal(20, 10)
+
+  @@unique([itemId, unit])
+  @@map("item_units")
+}
+
+// Stock history: physical counts entered by the store ("doer"), daily or weekly, and
+// quantities accepted on goods receipts. `quantity` is the stock after the entry.
+model StockCount {
+  id          Int            @id @default(autoincrement())
+  kind        StockEntryKind @default(COUNT)
+  itemId      Int            @map("item_id")
+  item        Item           @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  quantity    Decimal        @db.Decimal(14, 3)
+  previousQty Decimal?       @map("previous_qty") @db.Decimal(14, 3)
+  // RECEIPT: the GRN it came from
+  grnId       Int?           @map("grn_id")
+  grn         GoodsReceipt?  @relation(fields: [grnId], references: [id], onDelete: SetNull)
+  note        String?
+  countedById Int      @map("counted_by")
+  countedBy   User     @relation(fields: [countedById], references: [id])
+  countedAt   DateTime @default(now()) @map("counted_at")
+
+  @@index([itemId, countedAt])
+  @@map("stock_counts")
+}
+
+model PurchaseOrder {
+  id       Int      @id @default(autoincrement())
+  // Assigned on approval so issued PO numbers stay gapless (PO/2026-27/0001).
+  poNumber String?  @unique @map("po_number")
+  status   POStatus @default(DRAFT)
+
+  vendorId Int    @map("vendor_id")
+  vendor   Vendor @relation(fields: [vendorId], references: [id])
+
+  // Set when the PO was created from an approved comparative statement.
+  indentId    Int?       @map("indent_id")
+  indent      Indent?    @relation(fields: [indentId], references: [id])
+  quotationId Int?       @map("quotation_id")
+  quotation   Quotation? @relation(fields: [quotationId], references: [id])
+
+  poDate               DateTime? @map("po_date")
+  expectedDeliveryDate DateTime? @map("expected_delivery_date") @db.Date
+  quotationRef         String?   @map("quotation_ref")
+  quotationDate        DateTime? @map("quotation_date") @db.Date
+  // Printed in the PO's "Billing Details" box (snapshot of an address book entry)
+  billingAddress       String?   @map("billing_address")
+  // Printed in the "Shipping Address" box
+  deliveryAddress      String?   @map("delivery_address")
+  paymentTerms         String?   @map("payment_terms")
+  terms                String?
+  internalNotes        String?   @map("internal_notes")
+
+  taxMode    TaxMode @default(INTRA_STATE) @map("tax_mode")
+  subtotal   Decimal @default(0) @db.Decimal(15, 2)
+  cgstAmount Decimal @default(0) @map("cgst_amount") @db.Decimal(15, 2)
+  sgstAmount Decimal @default(0) @map("sgst_amount") @db.Decimal(15, 2)
+  igstAmount Decimal @default(0) @map("igst_amount") @db.Decimal(15, 2)
+  roundOff   Decimal @default(0) @map("round_off") @db.Decimal(15, 2)
+  grandTotal Decimal @default(0) @map("grand_total") @db.Decimal(15, 2)
+
+  createdById Int  @map("created_by")
+  createdBy   User @relation("POCreatedBy", fields: [createdById], references: [id])
+
+  submittedAt     DateTime? @map("submitted_at")
+  approvedById    Int?      @map("approved_by")
+  approvedBy      User?     @relation("POApprovedBy", fields: [approvedById], references: [id])
+  approvedAt      DateTime? @map("approved_at")
+  rejectionReason String?   @map("rejection_reason")
+  sentById        Int?      @map("sent_by")
+  sentBy          User?     @relation("POSentBy", fields: [sentById], references: [id])
+  sentAt          DateTime? @map("sent_at")
+  sentTo          String?   @map("sent_to")
+  cancelledAt     DateTime? @map("cancelled_at")
+  cancelReason    String?   @map("cancel_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  items         PoItem[]
+  documents     Document[]
+  goodsReceipts GoodsReceipt[]
+  issues        VendorIssue[]
+  amendments    PoAmendment[]
+  bills         Bill[]
+  // Amendments: revision 0 = original; each approved amendment increments it
+  revision      Int       @default(0)
+  revisedAt     DateTime? @map("revised_at")
+  // Credit days from the approved quotation; drives the bill due date
+  creditDays    Int?      @map("credit_days")
+  // FMS ST3: vendor confirmed the PO and its dispatch date (lead time)
+  acknowledgedAt       DateTime? @map("acknowledged_at")
+  expectedDispatchDate DateTime? @map("expected_dispatch_date") @db.Date
+  // FMS ST4: follow-up before dispatch, and dispatch confirmed with bilty
+  followUpAt           DateTime? @map("follow_up_at")
+  followUpNote         String?   @map("follow_up_note")
+  dispatchedAt         DateTime? @map("dispatched_at")
+  dispatchBiltyNo      String?   @map("dispatch_bilty_no")
+  dispatchTransporter  String?   @map("dispatch_transporter")
+  dispatchNote         String?   @map("dispatch_note")
+  // Set when the PO was closed with quantity still pending (vendor won't supply the balance)
+  shortClosedAt     DateTime? @map("short_closed_at")
+  shortCloseReason  String?   @map("short_close_reason")
+
+  @@index([status])
+  @@index([vendorId])
+  @@index([indentId])
+  @@index([expectedDeliveryDate])
+  @@map("purchase_orders")
+}
+
+model PoItem {
+  id     Int           @id @default(autoincrement())
+  poId   Int           @map("po_id")
+  po     PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  lineNo Int           @map("line_no")
+  itemId Int           @map("item_id")
+  item   Item          @relation(fields: [itemId], references: [id])
+
+  // Snapshot of item master at the time of ordering
+  description String
+  hsnCode     String? @map("hsn_code")
+  uom         String
+
+  quantity         Decimal @db.Decimal(14, 3)
+  rate             Decimal @db.Decimal(15, 2)
+  discountPct      Decimal @default(0) @map("discount_pct") @db.Decimal(5, 2)
+  gstRate          Decimal @map("gst_rate") @db.Decimal(5, 2)
+  taxableAmount    Decimal @map("taxable_amount") @db.Decimal(15, 2)
+  taxAmount        Decimal @map("tax_amount") @db.Decimal(15, 2)
+  lineTotal        Decimal @map("line_total") @db.Decimal(15, 2)
+  // Accepted quantity across completed goods receipts
+  quantityReceived Decimal @default(0) @map("quantity_received") @db.Decimal(14, 3)
+  remarks          String?
+
+  grnItems GoodsReceiptItem[]
+
+  @@unique([poId, lineNo])
+  @@map("po_items")
+}
+
+// A requirement raised by any department; purchase collects quotations against it.
+model Indent {
+  id           Int            @id @default(autoincrement())
+  indentNumber String         @unique @map("indent_number")
+  status       IndentStatus   @default(DRAFT)
+  department   String?
+  priority     IndentPriority @default(NORMAL)
+  requiredBy   DateTime?      @map("required_by") @db.Date
+  purpose      String?
+
+  requestedById Int       @map("requested_by")
+  requestedBy   User      @relation("IndentRequestedBy", fields: [requestedById], references: [id])
+  submittedAt   DateTime? @map("submitted_at")
+
+  // Comparative statement submitted for approval
+  comparisonSubmittedById Int?      @map("comparison_submitted_by")
+  comparisonSubmittedBy   User?     @relation("IndentComparisonBy", fields: [comparisonSubmittedById], references: [id])
+  comparisonSubmittedAt   DateTime? @map("comparison_submitted_at")
+  // Required when fewer than three quotations were obtained
+  quoteJustification      String?   @map("quote_justification")
+  // Value of the vendor selection incl. GST and other charges; checked against approval limits
+  comparisonValue         Decimal?  @map("comparison_value") @db.Decimal(15, 2)
+
+  approvedById    Int?      @map("approved_by")
+  approvedBy      User?     @relation("IndentApprovedBy", fields: [approvedById], references: [id])
+  approvedAt      DateTime? @map("approved_at")
+  approvalNote    String?   @map("approval_note")
+  rejectionReason String?   @map("rejection_reason")
+  cancelledAt     DateTime? @map("cancelled_at")
+  cancelReason    String?   @map("cancel_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  items          IndentItem[]
+  quotations     Quotation[]
+  purchaseOrders PurchaseOrder[]
+
+  @@index([status])
+  @@map("indents")
+}
+
+model IndentItem {
+  id           Int      @id @default(autoincrement())
+  indentId     Int      @map("indent_id")
+  indent       Indent   @relation(fields: [indentId], references: [id], onDelete: Cascade)
+  lineNo       Int      @map("line_no")
+  itemId       Int      @map("item_id")
+  item         Item     @relation(fields: [itemId], references: [id])
+  description  String
+  uom          String
+  quantity     Decimal  @db.Decimal(14, 3)
+  // Stock on hand when raised, for context ("short" quantity)
+  currentStock Decimal? @map("current_stock") @db.Decimal(14, 3)
+  remarks      String?
+
+  // The vendor quote chosen for this line on the comparative statement
+  selectedQuoteItemId Int?           @unique @map("selected_quote_item_id")
+  selectedQuoteItem   QuotationItem? @relation("SelectedQuote", fields: [selectedQuoteItemId], references: [id], onDelete: SetNull)
+  // Why the recommended vendor was not chosen (if overridden)
+  selectionReason     String?        @map("selection_reason")
+
+  quoteItems QuotationItem[]
+
+  @@unique([indentId, lineNo])
+  @@map("indent_items")
+}
+
+model Quotation {
+  id               Int       @id @default(autoincrement())
+  indentId         Int       @map("indent_id")
+  indent           Indent    @relation(fields: [indentId], references: [id], onDelete: Cascade)
+  vendorId         Int       @map("vendor_id")
+  vendor           Vendor    @relation(fields: [vendorId], references: [id])
+  vendorRef        String?   @map("vendor_ref")
+  quoteDate        DateTime? @map("quote_date") @db.Date
+  validUntil       DateTime? @map("valid_until") @db.Date
+  deliveryDays     Int?      @map("delivery_days")
+  paymentTerms     String?   @map("payment_terms")
+  // 0 = advance / COD
+  creditDays       Int       @default(0) @map("credit_days")
+  earlyDiscountPct Decimal   @default(0) @map("early_discount_pct") @db.Decimal(5, 2)
+  // Freight: INCLUDED in the rates, or EXTRA (otherCharges when known, else at actuals); null = not stated
+  freightTerms     String?   @map("freight_terms")
+  // Freight, packing etc. quoted separately from item rates
+  otherCharges     Decimal   @default(0) @map("other_charges") @db.Decimal(15, 2)
+  notes            String?
+  attachmentPath   String?   @map("attachment_path")
+  attachmentName   String?   @map("attachment_name")
+  createdById      Int       @map("created_by")
+  createdBy        User      @relation(fields: [createdById], references: [id])
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  items          QuotationItem[]
+  purchaseOrders PurchaseOrder[]
+
+  @@unique([indentId, vendorId])
+  @@map("quotations")
+}
+
+model QuotationItem {
+  id           Int        @id @default(autoincrement())
+  quotationId  Int        @map("quotation_id")
+  quotation    Quotation  @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  indentItemId Int        @map("indent_item_id")
+  indentItem   IndentItem @relation(fields: [indentItemId], references: [id], onDelete: Cascade)
+  rate         Decimal    @db.Decimal(15, 2)
+  discountPct  Decimal    @default(0) @map("discount_pct") @db.Decimal(5, 2)
+  gstRate      Decimal    @map("gst_rate") @db.Decimal(5, 2)
+  remarks      String?
+
+  selectedFor IndentItem? @relation("SelectedQuote")
+
+  @@unique([quotationId, indentItemId])
+  @@map("quotation_items")
+}
+
+// Goods receipt note: one delivery against a PO (a PO can be delivered in several lots).
+model GoodsReceipt {
+  id         Int       @id @default(autoincrement())
+  grnNumber  String    @unique @map("grn_number")
+  status     GrnStatus @default(PENDING_QC)
+  poId       Int       @map("po_id")
+  po         PurchaseOrder @relation(fields: [poId], references: [id])
+  vendorId   Int       @map("vendor_id")
+  vendor     Vendor    @relation(fields: [vendorId], references: [id])
+  receivedAt DateTime  @map("received_at") @db.Date
+
+  // Vendor documents
+  invoiceNo     String?   @map("invoice_no")
+  invoiceDate   DateTime? @map("invoice_date") @db.Date
+  invoiceAmount Decimal?  @map("invoice_amount") @db.Decimal(15, 2)
+  challanNo     String?   @map("challan_no")
+  // Transport: bilty / lorry receipt
+  transporter   String?
+  biltyNo       String?   @map("bilty_no")
+  biltyDate     DateTime? @map("bilty_date") @db.Date
+  vehicleNo     String?   @map("vehicle_no")
+  freightAmount Decimal?  @map("freight_amount") @db.Decimal(15, 2)
+  remarks       String?
+
+  receivedById Int       @map("received_by")
+  receivedBy   User      @relation("GrnReceivedBy", fields: [receivedById], references: [id])
+  qcById       Int?      @map("qc_by")
+  qcBy         User?     @relation("GrnCheckedBy", fields: [qcById], references: [id])
+  qcAt         DateTime? @map("qc_at")
+  qcRemarks    String?   @map("qc_remarks")
+  cancelledAt  DateTime? @map("cancelled_at")
+  cancelReason String?   @map("cancel_reason")
+  // FMS ST7: rejected material sent back to the vendor
+  returnedAt   DateTime? @map("returned_at")
+  returnNote   String?   @map("return_note")
+  returnedById Int?      @map("returned_by")
+  returnedBy   User?     @relation("GrnReturnedBy", fields: [returnedById], references: [id])
+  // FMS ST8: material stored and entered in Tally
+  storedAt     DateTime? @map("stored_at")
+  tallyRef     String?   @map("tally_ref")
+  storedById   Int?      @map("stored_by")
+  storedBy     User?     @relation("GrnStoredBy", fields: [storedById], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  items       GoodsReceiptItem[]
+  documents   Document[]
+  issues      VendorIssue[]
+  stockCounts StockCount[]
+  bill        Bill?
+
+  @@index([poId])
+  @@index([vendorId, receivedAt])
+  @@index([status])
+  @@map("goods_receipts")
+}
+
+model GoodsReceiptItem {
+  id          Int          @id @default(autoincrement())
+  grnId       Int          @map("grn_id")
+  grn         GoodsReceipt @relation(fields: [grnId], references: [id], onDelete: Cascade)
+  poItemId    Int          @map("po_item_id")
+  poItem      PoItem       @relation(fields: [poItemId], references: [id])
+  itemId      Int          @map("item_id")
+  item        Item         @relation(fields: [itemId], references: [id])
+  // As per the vendor's invoice / challan
+  invoiceQty  Decimal?     @map("invoice_qty") @db.Decimal(14, 3)
+  // Physically received (counted / weighed at the gate)
+  receivedQty Decimal      @map("received_qty") @db.Decimal(14, 3)
+  // Filled in by the quantity & quality check
+  qtyCheck     CheckResult? @map("qty_check")
+  qualityCheck CheckResult? @map("quality_check")
+  acceptedQty  Decimal?     @map("accepted_qty") @db.Decimal(14, 3)
+  rejectedQty  Decimal?     @map("rejected_qty") @db.Decimal(14, 3)
+  remarks      String?
+
+  billLines BillLine[]
+
+  @@index([grnId])
+  @@index([poItemId])
+  @@index([itemId])
+  @@map("goods_receipt_items")
+}
+
+enum AmendmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+// A change to an issued PO (qty, rate, delivery date, terms). Applied only once approved;
+// the PO then becomes Rev. N and its PDF is regenerated.
+model PoAmendment {
+  id           Int             @id @default(autoincrement())
+  poId         Int             @map("po_id")
+  po           PurchaseOrder   @relation(fields: [poId], references: [id], onDelete: Cascade)
+  revisionNo   Int             @map("revision_no")
+  status       AmendmentStatus @default(PENDING)
+  reason       String
+  // Proposed values: { header: {...}, lines: [{ poItemId, quantity, rate, discountPct, gstRate, remove }] }
+  changes      Json
+  // Human-readable list of what changes, e.g. ["Line 1 rate 180.00 → 176.00"]
+  summary      Json
+  oldTotal     Decimal         @map("old_total") @db.Decimal(15, 2)
+  newTotal     Decimal         @map("new_total") @db.Decimal(15, 2)
+  requestedById Int            @map("requested_by")
+  requestedBy  User            @relation("AmendmentRequestedBy", fields: [requestedById], references: [id])
+  requestedAt  DateTime        @default(now()) @map("requested_at")
+  decidedById  Int?            @map("decided_by")
+  decidedBy    User?           @relation("AmendmentDecidedBy", fields: [decidedById], references: [id])
+  decidedAt    DateTime?       @map("decided_at")
+  decisionNote String?         @map("decision_note")
+
+  @@unique([poId, revisionNo])
+  @@index([status])
+  @@map("po_amendments")
+}
+
+enum BillStatus {
+  ENTERED // recorded and matched; waiting to be passed
+  HOLD // mismatch or dispute, not to be paid yet
+  PASSED // approved for payment
+  CANCELLED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTLY_PAID
+  PAID
+}
+
+// Vendor invoice matched against the PO (rate) and goods receipt (accepted qty): 3-way match.
+model Bill {
+  id              Int           @id @default(autoincrement())
+  billNumber      String        @unique @map("bill_number")
+  grnId           Int           @unique @map("grn_id")
+  grn             GoodsReceipt  @relation(fields: [grnId], references: [id])
+  poId            Int           @map("po_id")
+  po              PurchaseOrder @relation(fields: [poId], references: [id])
+  vendorId        Int           @map("vendor_id")
+  vendor          Vendor        @relation(fields: [vendorId], references: [id])
+  invoiceNo       String        @map("invoice_no")
+  invoiceDate     DateTime      @map("invoice_date") @db.Date
+  // As per the vendor's invoice
+  taxableAmount   Decimal       @map("taxable_amount") @db.Decimal(15, 2)
+  taxAmount       Decimal       @map("tax_amount") @db.Decimal(15, 2)
+  otherCharges    Decimal       @default(0) @map("other_charges") @db.Decimal(15, 2)
+  totalAmount     Decimal       @map("total_amount") @db.Decimal(15, 2)
+  // What the invoice should be: accepted qty × PO rate + GST + other charges
+  expectedAmount  Decimal       @map("expected_amount") @db.Decimal(15, 2)
+  // Debit for excess qty / rate billed (incl. GST) plus any other deduction
+  debitAmount     Decimal       @default(0) @map("debit_amount") @db.Decimal(15, 2)
+  otherDebit      Decimal       @default(0) @map("other_debit") @db.Decimal(15, 2)
+  otherDebitReason String?      @map("other_debit_reason")
+  debitNoteNumber String?       @unique @map("debit_note_number")
+  payableAmount   Decimal       @map("payable_amount") @db.Decimal(15, 2)
+  paidAmount      Decimal       @default(0) @map("paid_amount") @db.Decimal(15, 2)
+  creditDays      Int           @default(0) @map("credit_days")
+  dueDate         DateTime      @map("due_date") @db.Date
+  msme            Boolean       @default(false)
+  status          BillStatus    @default(ENTERED)
+  paymentStatus   PaymentStatus @default(UNPAID) @map("payment_status")
+  holdReason      String?       @map("hold_reason")
+  remarks         String?
+  createdById     Int           @map("created_by")
+  createdBy       User          @relation("BillCreatedBy", fields: [createdById], references: [id])
+  createdAt       DateTime      @default(now()) @map("created_at")
+  passedById      Int?          @map("passed_by")
+  passedBy        User?         @relation("BillPassedBy", fields: [passedById], references: [id])
+  passedAt        DateTime?     @map("passed_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  lines    BillLine[]
+  payments Payment[]
+
+  @@index([vendorId])
+  @@index([status, paymentStatus, dueDate])
+  @@map("bills")
+}
+
+model BillLine {
+  id          Int              @id @default(autoincrement())
+  billId      Int              @map("bill_id")
+  bill        Bill             @relation(fields: [billId], references: [id], onDelete: Cascade)
+  grnItemId   Int              @map("grn_item_id")
+  grnItem     GoodsReceiptItem @relation(fields: [grnItemId], references: [id])
+  description String
+  uom         String
+  acceptedQty Decimal          @map("accepted_qty") @db.Decimal(14, 3)
+  // PO rate net of discount
+  poRate      Decimal          @map("po_rate") @db.Decimal(15, 2)
+  gstRate     Decimal          @map("gst_rate") @db.Decimal(5, 2)
+  billedQty   Decimal          @map("billed_qty") @db.Decimal(14, 3)
+  billedRate  Decimal          @map("billed_rate") @db.Decimal(15, 2)
+  // Excess billed (qty above accepted, rate above PO), incl. GST
+  debitAmount Decimal          @default(0) @map("debit_amount") @db.Decimal(15, 2)
+
+  @@index([billId])
+  @@map("bill_lines")
+}
+
+model Payment {
+  id          Int      @id @default(autoincrement())
+  billId      Int      @map("bill_id")
+  bill        Bill     @relation(fields: [billId], references: [id], onDelete: Cascade)
+  amount      Decimal  @db.Decimal(15, 2)
+  paidOn      DateTime @map("paid_on") @db.Date
+  mode        String // NEFT / RTGS / Cheque / UPI / Cash
+  reference   String? // UTR / cheque no.
+  note        String?
+  createdById Int      @map("created_by")
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([billId])
+  @@map("payments")
+}
+
+// A problem with a vendor's delivery (short qty, quality, late, documents…), tracked to resolution.
+model VendorIssue {
+  id          Int           @id @default(autoincrement())
+  vendorId    Int           @map("vendor_id")
+  vendor      Vendor        @relation(fields: [vendorId], references: [id])
+  poId        Int?          @map("po_id")
+  po          PurchaseOrder? @relation(fields: [poId], references: [id])
+  grnId       Int?          @map("grn_id")
+  grn         GoodsReceipt? @relation(fields: [grnId], references: [id])
+  itemId      Int?          @map("item_id")
+  item        Item?         @relation(fields: [itemId], references: [id])
+  type        IssueType
+  description String
+  qtyAffected Decimal?      @map("qty_affected") @db.Decimal(14, 3)
+  status      IssueStatus   @default(OPEN)
+  resolution  String?
+
+  raisedById   Int       @map("raised_by")
+  raisedBy     User      @relation("IssueRaisedBy", fields: [raisedById], references: [id])
+  raisedAt     DateTime  @default(now()) @map("raised_at")
+  resolvedById Int?      @map("resolved_by")
+  resolvedBy   User?     @relation("IssueResolvedBy", fields: [resolvedById], references: [id])
+  resolvedAt   DateTime? @map("resolved_at")
+
+  @@index([vendorId, status])
+  @@index([grnId])
+  @@index([poId])
+  @@map("vendor_issues")
+}
+
+model Document {
+  id          Int            @id @default(autoincrement())
+  type        DocumentType
+  poId        Int?           @map("po_id")
+  po          PurchaseOrder? @relation(fields: [poId], references: [id], onDelete: Cascade)
+  grnId       Int?           @map("grn_id")
+  grn         GoodsReceipt?  @relation(fields: [grnId], references: [id], onDelete: Cascade)
+  fileName    String         @map("file_name")
+  storagePath String         @map("storage_path")
+  mimeType    String         @map("mime_type")
+  size        Int
+  sha256      String
+  version     Int            @default(1)
+  status      DocumentStatus @default(ACTIVE)
+  createdById Int?           @map("created_by")
+  createdBy   User?          @relation(fields: [createdById], references: [id])
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  @@index([poId, type])
+  @@index([grnId])
+  @@map("documents")
+}
+
+// Sequence counters, e.g. key "PO:2026-27" -> last issued number.
+model Counter {
+  key   String @id
+  value Int    @default(0)
+
+  @@map("counters")
+}
+
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  userId      Int?     @map("user_id")
+  user        User?    @relation(fields: [userId], references: [id])
+  action      String
+  entityType  String   @map("entity_type")
+  entityId    Int      @map("entity_id")
+  description String?
+  data        Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

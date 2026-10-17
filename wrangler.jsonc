@@ -1,0 +1,40 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "purchasedesk",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-09-26",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  // Don't inject esbuild's __name() helper: it leaks into Next.js inline scripts (e.g. the theme
+  // script) and breaks in the browser with "ReferenceError: __name is not defined".
+  "keep_names": false,
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true
+  },
+  // Run the Worker near the database (Neon, Singapore) instead of near the visitor: each page makes
+  // many queries, so short DB round trips matter more than the single trip to the browser.
+  "placement": { "mode": "smart" },
+  // Pooled, warm connections to the Neon database. Create your own with
+  // `npx wrangler hyperdrive create purchasedesk --connection-string="<DATABASE_URL>"` and put its id here.
+  // src/lib/db.ts uses it automatically on Workers; local `next dev` keeps using DATABASE_URL.
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "<your-hyperdrive-id>",
+      // Only used when Wrangler emulates the Worker locally (e.g. `opennextjs-cloudflare deploy`
+      // checks bindings before deploying). Production always uses the Hyperdrive config above.
+      "localConnectionString": "postgresql://postgres:postgres@localhost:5432/purchasedesk"
+    }
+  ],
+  // Non-secret settings. Secrets (DATABASE_URL, SESSION_SECRET, AWS_*, GOOGLE_*) are set with
+  // `wrangler secret put` or in the dashboard. Email goes out from each user's own Gmail (Gmail API).
+  "vars": {
+    "APP_URL": "https://purchasedesk.<your-subdomain>.workers.dev",
+    "ALLOWED_EMAIL_DOMAIN": "",
+    "DELETE_ADMIN_EMAILS": "",
+    "STORAGE_BUCKET": "purchasedocs"
+  }
+}
