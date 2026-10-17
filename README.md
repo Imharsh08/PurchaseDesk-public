@@ -192,3 +192,12 @@ https://imharsh08.github.io/PurchaseDesk-public/. In a fork, change the GitHub l
 - [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md): the original schema design (`prisma/schema.prisma` is the source of truth)
 - [QUOTATION_SCORING.md](QUOTATION_SCORING.md): how vendors are scored
 - [MVP_PLAN.md](MVP_PLAN.md): the original roadmap
+
+## Author
+
+Built with ♥, chai and dedication in India by **Harsh Kashyap**.
+
+[WhatsApp +91 73515 34994](https://wa.me/917351534994) ·
+[Instagram @imharsh_08](https://www.instagram.com/imharsh_08/) ·
+[LinkedIn](https://www.linkedin.com/in/harsh-kashyap-bioinformatics/) ·
+[GitHub @Imharsh08](https://github.com/Imharsh08)

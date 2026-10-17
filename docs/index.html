@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>PurchaseDesk</title>
 <meta name="description" content="Open-source purchase management for manufacturers: indents, quotation comparison, approvals, purchase orders, goods receipt, bills and an FMS step tracker. Built for Indian GST, free to host.">
+<meta name="author" content="Harsh Kashyap">
 <meta property="og:title" content="PurchaseDesk">
 <meta property="og:description" content="From indent to payment: every purchase step, timed. Open source, built for Indian GST.">
 <meta property="og:image" content="img/dashboard.webp">
@@ -46,6 +47,18 @@
   .nav a { text-decoration: none; }
   .nav ul a:hover, .nav .gh:hover { color: var(--chili); }
   .nav .gh { justify-self: end; }
+  .menu-btn { display: none; justify-self: end; background: none; border: 0; padding: 10px 0; color: var(--ink); cursor: pointer; }
+  .menu { position: fixed; inset: 0; z-index: 50; background: var(--sun); display: flex; flex-direction: column; overflow: auto; overflow-x: hidden; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .menu[hidden] { display: none; }
+  .menu > .wrap { width: 100%; }
+  .menu-shape { position: absolute; pointer-events: none; }
+  .menu-top { position: relative; display: flex; justify-content: space-between; align-items: center; padding-block: 18px; }
+  .menu-close { background: none; border: 0; padding: 10px 0; color: var(--ink); cursor: pointer; }
+  .menu nav { position: relative; display: grid; gap: 6px; padding-block: 28px 32px; }
+  .menu nav a { font-family: var(--display); text-transform: uppercase; font-size: clamp(52px, 15vw, 104px); line-height: .95; text-decoration: none; color: var(--ink); justify-self: start; }
+  .menu nav a:hover, .menu nav a:focus-visible { color: var(--chili); }
+  .menu-foot { position: relative; margin: auto 0 0; padding-block: 20px; color: var(--chili); }
+  .motion .menu:not([hidden]) nav a { animation: fadeup .55s cubic-bezier(.2,.8,.2,1) backwards; animation-delay: calc(var(--i) * 60ms); }
 
   /* Hero */
   .hero { position: relative; overflow: hidden; padding-bottom: 0; }
@@ -61,7 +74,7 @@
   .vert.l { left: 12px; transform: rotate(180deg); }
   .vert.r { right: 12px; }
   .phone-slot { grid-column: 2; }
-  .phone { position: absolute; z-index: 3; left: 50%; transform: translateX(-50%); top: min(11vw, 158px); width: clamp(240px, 23vw, 330px); aspect-ratio: 390 / 844; border-radius: 15% / 7%; background: #111; padding: clamp(6px, .8vw, 11px); box-shadow: 0 30px 60px -20px rgba(0,0,0,.45), inset 0 0 0 2px #2b2b2b; container-type: inline-size; }
+  .phone { position: absolute; z-index: 3; left: 50%; transform: translateX(-50%) translateY(var(--sink, 0%)); top: min(11vw, 158px); width: clamp(240px, 23vw, 330px); aspect-ratio: 390 / 844; border-radius: 15% / 7%; background: #111; padding: clamp(6px, .8vw, 11px); box-shadow: 0 30px 60px -20px rgba(0,0,0,.45), inset 0 0 0 2px #2b2b2b; container-type: inline-size; }
   .phone::before { content: ""; position: absolute; top: 5.6cqw; left: 50%; transform: translateX(-50%); width: 30%; height: 8.4cqw; border-radius: 6cqw; background: #0a0a0a; z-index: 2; }
   .phone .screen { position: relative; height: 100%; border-radius: 12% / 5.6%; overflow: hidden; background: #f8f7f4; padding-top: 14cqw; }
   .phone .sb { position: absolute; top: 4.6cqw; left: 11cqw; font: 600 4.4cqw var(--body); color: var(--ink); }
@@ -221,6 +234,24 @@
   .foot a:hover { color: var(--chili); }
   .foot .say { display: grid; gap: 22px; align-content: start; }
   .foot .say p { margin: 0; }
+  .sig { margin: 48px auto 0; font-size: clamp(18px, 2.2vw, 26px); font-weight: 600; letter-spacing: -.01em; text-wrap: balance; }
+  .sig .heart { color: var(--chili); display: inline-block; }
+  .motion .sig .heart { animation: beat 1.6s ease-in-out infinite; }
+  .sig a { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 5px; text-decoration-color: var(--sun); }
+  .sig a:hover { color: var(--chili); }
+  .connect { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 22px; }
+  .connect > .mono { margin-right: 6px; color: var(--stone); }
+  .soc { display: inline-flex; align-items: baseline; gap: 10px; padding: 11px 16px; border-radius: 12px; background: var(--ink); color: #fff; font-weight: 600; font-size: 14.5px; text-decoration: none; transition: transform .15s ease, background .15s ease; }
+  .soc span { font-family: var(--mono); font-size: 12px; font-weight: 400; color: var(--sun); }
+  .soc:hover { transform: translateY(-2px); background: var(--chili); }
+  .soc:hover span { color: #fff; }
+  .soc.wa { background: var(--sun); color: var(--ink); }
+  .soc.wa span { color: var(--ink); }
+  .soc.wa:hover { background: var(--chili); color: #fff; }
+  .menu-links { position: relative; display: flex; flex-wrap: wrap; gap: 8px 16px; padding-block: 0 8px; }
+  .menu-links a { text-decoration: none; }
+  .menu-links a:hover { color: var(--chili); }
+  @keyframes beat { 0%, 60%, 100% { transform: scale(1); } 15% { transform: scale(1.25); } 30% { transform: scale(1.05); } 45% { transform: scale(1.18); } }
   .word { font-family: var(--display); text-transform: uppercase; font-size: min(15.6vw, 226px); line-height: .8; margin: 48px 0 0; white-space: nowrap; letter-spacing: -.005em; text-align: center; transform: translateY(6%); }
 
   /* Motion (desktop, motion allowed; html.motion is set before first paint) */
@@ -231,7 +262,7 @@
   .motion .hero .phone { animation: phonein 1s .5s cubic-bezier(.2,.8,.2,1) backwards; visibility: visible; }
   @keyframes rise { from { transform: translateY(55%); opacity: 0; } }
   @keyframes fadeup { from { transform: translateY(16px); opacity: 0; } }
-  @keyframes phonein { from { transform: translateX(-50%) translateY(40%); opacity: 0; } }
+  @keyframes phonein { from { translate: 0 40%; opacity: 0; } }
   @keyframes drop {
     0% { transform: translateY(-170%) rotate(-28deg); opacity: 0; animation-timing-function: cubic-bezier(.55,0,1,.45); }
     12% { opacity: 1; }
@@ -242,7 +273,7 @@
     100% { transform: none; opacity: 1; }
   }
   .motion .statement-run { height: 240vh; }
-  .motion .statement { position: sticky; top: 0; height: 100vh; display: grid; align-items: center; padding-block: 0; }
+  .motion .statement { position: sticky; top: 0; height: 100vh; height: 100svh; display: grid; align-items: center; padding-block: 0; }
   .motion .paren .box { visibility: hidden; }
   .motion .paren .box.landed { visibility: visible; }
   .motion .statement .ch { display: inline-block; opacity: 0; transform: translateY(.35em) scale(.9); transition: opacity .22s ease, transform .4s cubic-bezier(.2,.9,.25,1.15); }
@@ -257,11 +288,13 @@
   .ghost .stamp { position: relative; z-index: 1; }
 
   @media (max-width: 960px) {
-    .nav ul { display: none; }
+    .nav ul, .nav .gh { display: none; }
+    .menu-btn { display: inline-block; }
     .nav { grid-template-columns: 1fr auto; }
     .stage { grid-template-columns: 1fr; padding: 32px 28px 0; min-height: 0; }
     .stage .right { grid-column: 1; justify-self: start; align-self: start; }
-    .phone { position: relative; left: auto; top: auto; transform: none; margin: 8px auto -120px; width: min(68vw, 300px); }
+    .phone { position: relative; left: auto; top: auto; transform: translateY(var(--sink, 0%)); margin: 8px auto -120px; width: min(68vw, 300px); }
+    .stage .right { margin-right: 0; }
     .phone-slot { display: none; }
     .hero .phone { order: 3; }
     .vert { display: none; }
@@ -281,8 +314,8 @@
   }
 </style>
 <script>
-  // Desktop with motion allowed: animate. Set before first paint so nothing flashes.
-  if (matchMedia("(min-width: 961px) and (prefers-reduced-motion: no-preference)").matches) document.documentElement.classList.add("motion");
+  // Animate unless the viewer asked for reduced motion. Set before first paint so nothing flashes.
+  if (matchMedia("(prefers-reduced-motion: no-preference)").matches) document.documentElement.classList.add("motion");
 </script>
 </head>
 <body>
@@ -296,7 +329,32 @@
     <li><a href="#deploy">( Deploy )</a></li>
   </ul>
   <a class="gh mono" href="https://github.com/Imharsh08/PurchaseDesk-public/">+ ( GitHub )</a>
+  <button class="menu-btn mono" type="button" aria-expanded="false" aria-controls="menu">+ ( Menu )</button>
 </header>
+
+<div class="menu" id="menu" role="dialog" aria-modal="true" aria-label="Menu" hidden>
+  <svg class="menu-shape" style="right:-18%;bottom:17%;width:46%" viewBox="0 0 200 200" aria-hidden="true"><g fill="#0d0d0d"><circle cx="100" cy="56" r="44"/><circle cx="144" cy="100" r="44"/><circle cx="100" cy="144" r="44"/><circle cx="56" cy="100" r="44"/></g></svg>
+  <svg class="menu-shape" style="left:-10%;bottom:19%;width:32%" viewBox="0 0 200 180" aria-hidden="true"><path fill="#e8402a" d="M100 172C40 128 4 96 4 56 4 26 28 4 58 4c18 0 34 9 42 24C108 13 124 4 142 4c30 0 54 22 54 52 0 40-36 72-96 116z"/></svg>
+  <div class="wrap menu-top">
+    <span class="mono">PurchaseDesk</span>
+    <button class="menu-close mono" type="button">( Close ) ✕</button>
+  </div>
+  <nav class="wrap" aria-label="Sections">
+    <a href="#features" style="--i:0">Features</a>
+    <a href="#screens" style="--i:1">Screens</a>
+    <a href="#flow" style="--i:2">How it flows</a>
+    <a href="#deploy" style="--i:3">Deploy</a>
+    <a href="https://github.com/Imharsh08/PurchaseDesk-public/" style="--i:4">GitHub ↗</a>
+  </nav>
+  <div class="wrap mono menu-foot">
+    <div class="menu-links">
+      <a href="https://wa.me/917351534994?text=Hi%20Harsh%2C%20I%20saw%20PurchaseDesk%20on%20GitHub" target="_blank" rel="noopener">( WhatsApp )</a>
+      <a href="https://www.instagram.com/imharsh_08/" target="_blank" rel="noopener">( Instagram )</a>
+      <a href="https://www.linkedin.com/in/harsh-kashyap-bioinformatics/" target="_blank" rel="noopener">( LinkedIn )</a>
+    </div>
+    By Harsh Kashyap · +91 73515 34994
+  </div>
+</div>
 
 <main id="top">
   <section class="wrap hero" aria-labelledby="hero-title">
@@ -807,6 +865,14 @@ neon functions deploy api \
       <p>Open source · Screens show demo data</p>
     </div>
   </div>
+  <p class="wrap sig">Built with <span class="heart" aria-label="love">♥</span>, chai and dedication in India by <a href="https://github.com/Imharsh08">Harsh Kashyap</a></p>
+  <div class="wrap connect" aria-label="Connect with Harsh Kashyap">
+    <span class="mono">( Connect )</span>
+    <a class="soc wa" href="https://wa.me/917351534994?text=Hi%20Harsh%2C%20I%20saw%20PurchaseDesk%20on%20GitHub" target="_blank" rel="noopener">WhatsApp <span>+91 73515 34994</span></a>
+    <a class="soc" href="https://www.instagram.com/imharsh_08/" target="_blank" rel="noopener">Instagram <span>@imharsh_08</span></a>
+    <a class="soc" href="https://www.linkedin.com/in/harsh-kashyap-bioinformatics/" target="_blank" rel="noopener">LinkedIn <span>Harsh Kashyap</span></a>
+    <a class="soc" href="https://github.com/Imharsh08" target="_blank" rel="noopener">GitHub <span>@Imharsh08</span></a>
+  </div>
   <p class="word" aria-hidden="true">PurchaseDesk</p>
 </footer>
 
@@ -819,12 +885,30 @@ neon functions deploy api \
     });
   });
 
+  // Mobile menu
+  (function () {
+    var menu = document.getElementById("menu");
+    var btn = document.querySelector(".menu-btn");
+    function set(open, refocus) {
+      menu.hidden = !open;
+      btn.setAttribute("aria-expanded", String(open));
+      document.body.style.overflow = open ? "hidden" : "";
+      if (open) menu.querySelector(".menu-close").focus();
+      else if (refocus) btn.focus({ preventScroll: true });
+    }
+    btn.addEventListener("click", function () { set(true); });
+    menu.querySelector(".menu-close").addEventListener("click", function () { set(false, true); });
+    menu.querySelectorAll("nav a").forEach(function (a) { a.addEventListener("click", function () { set(false); }); });
+    addEventListener("keydown", function (e) { if (e.key === "Escape" && !menu.hidden) set(false, true); });
+    matchMedia("(min-width: 961px)").addEventListener("change", function (e) { if (e.matches && !menu.hidden) set(false); });
+  })();
+
   // Hero → statement: as you scroll, the yellow stage shrinks into the box of the statement, its shapes
   // fall away, the phone sinks, and the box lands as the "Approved" stamp. The statement then holds
   // (sticky) while its words type in and the lines and buttons appear.
   (function () {
     var root = document.documentElement;
-    var mq = matchMedia("(min-width: 961px) and (prefers-reduced-motion: no-preference)");
+    var mq = matchMedia("(prefers-reduced-motion: no-preference)");
     var stage = document.querySelector(".stage");
     var phone = stage.querySelector(".phone");
     var box = document.querySelector(".paren .box");
@@ -883,7 +967,7 @@ neon functions deploy api \
       var pt = clamp((y - s1) / (0.9 * vh));    // statement reveal while it holds
 
       fades.forEach(function (el) { el.style.opacity = String(1 - fade); });
-      phone.style.transform = "translateX(-50%) translateY(" + (ease(clamp(p / 0.45)) * 60).toFixed(2) + "%)";
+      phone.style.setProperty("--sink", (ease(clamp(p / 0.45)) * 60).toFixed(2) + "%");
       phone.style.opacity = String(1 - clamp(p / 0.35));
 
       if (p <= 0 || p >= 1) {
@@ -931,6 +1015,7 @@ neon functions deploy api \
       }
       // Static layout: clear everything the animation set.
       [stage, phone, box].concat(fades, rules, extras).forEach(function (el) { el.style.visibility = el.style.opacity = el.style.transform = ""; });
+      phone.style.removeProperty("--sink");
       box.classList.remove("landed");
       if (ghost) ghost.style.display = "none";
     }
